@@ -24,7 +24,7 @@ static void apply_modal_button_common_style(lv_obj_t *btn);
 static lv_color_t modal_accent_blue_grey()
 {
 	// Matches the keypad button base color.
-	return lv_palette_darken(LV_PALETTE_BLUE_GREY, 3);
+	return lv_palette_darken(LV_PALETTE_BLUE_GREY, 4);
 }
 
 static void trim_trailing_zeros_inplace(char *s)
@@ -60,29 +60,38 @@ static void apply_numpad_key_style(lv_obj_t *btn)
 		return;
 
 	// Keypad style: blue/grey blocks like the default keyboard, no borders.
+	// Force full opacity so underlying content never shows through.
+	lv_obj_set_style_opa(btn, LV_OPA_COVER, LV_PART_MAIN);
+	lv_obj_set_style_opa(btn, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_PRESSED);
+	// Some themes use bg images/gradients; disable them for a solid fill.
+	lv_obj_set_style_bg_image_opa(btn, LV_OPA_TRANSP, LV_PART_MAIN);
+	lv_obj_set_style_bg_image_opa(btn, LV_OPA_TRANSP, LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_bg_grad_dir(btn, LV_GRAD_DIR_NONE, LV_PART_MAIN);
+	lv_obj_set_style_bg_grad_dir(btn, LV_GRAD_DIR_NONE, LV_PART_MAIN | LV_STATE_PRESSED);
+
 	lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, LV_PART_MAIN);
 	// Darker base so white numerals are more legible.
 	lv_obj_set_style_bg_color(btn, modal_accent_blue_grey(), LV_PART_MAIN);
 	lv_obj_set_style_text_color(btn, lv_color_white(), LV_PART_MAIN);
 	lv_obj_set_style_border_width(btn, 0, LV_PART_MAIN);
 
-	// Slightly reduced radius only for keypad buttons.
-	lv_obj_set_style_radius(btn, 6, LV_PART_MAIN);
+	// No corner radius on keypad buttons.
+	lv_obj_set_style_radius(btn, 0, LV_PART_MAIN);
 
 	// Press feedback: subtle color change, consistent with other buttons (avoid going black).
-	lv_obj_set_style_bg_color(btn, lv_palette_darken(LV_PALETTE_BLUE_GREY, 4), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_bg_color(btn, lv_palette_darken(LV_PALETTE_BLUE_GREY, 3), LV_PART_MAIN | LV_STATE_PRESSED);
 	lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_PRESSED);
 	lv_obj_set_style_border_width(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED);
-	lv_obj_set_style_radius(btn, 6, LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_radius(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED);
 
 	// Ensure no grow/anim artifacts
 	apply_modal_button_common_style(btn);
 	lv_obj_set_style_border_width(btn, 0, LV_PART_MAIN);
 	lv_obj_set_style_border_width(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED);
 	lv_obj_set_style_border_width(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
-	lv_obj_set_style_radius(btn, 6, LV_PART_MAIN);
-	lv_obj_set_style_radius(btn, 6, LV_PART_MAIN | LV_STATE_PRESSED);
-	lv_obj_set_style_radius(btn, 6, LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+	lv_obj_set_style_radius(btn, 0, LV_PART_MAIN);
+	lv_obj_set_style_radius(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_radius(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
 }
 
 static lv_obj_t *create_numpad(lv_obj_t *parent)
@@ -109,8 +118,8 @@ static lv_obj_t *create_numpad(lv_obj_t *parent)
 	lv_obj_set_style_border_width(grid, 0, 0);
 	lv_obj_set_style_pad_all(grid, 0, 0);
 	// Tighter spacing between keypad buttons
-	lv_obj_set_style_pad_row(grid, 1, 0);
-	lv_obj_set_style_pad_column(grid, 1, 0);
+	lv_obj_set_style_pad_row(grid, 2, 0);
+	lv_obj_set_style_pad_column(grid, 2, 0);
 
 	static int32_t col_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
 	static int32_t row_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
@@ -160,7 +169,7 @@ static lv_obj_t *create_numpad(lv_obj_t *parent)
 	lv_obj_set_style_bg_opa(right_col, LV_OPA_TRANSP, 0);
 	lv_obj_set_style_border_width(right_col, 0, 0);
 	lv_obj_set_style_pad_all(right_col, 0, 0);
-	lv_obj_set_style_pad_gap(right_col, 1, 0);
+	lv_obj_set_style_pad_gap(right_col, 2, 0);
 	lv_obj_set_flex_flow(right_col, LV_FLEX_FLOW_COLUMN);
 
 	lv_obj_t *btn_bs = lv_btn_create(right_col);
@@ -260,6 +269,10 @@ void ModalManager::showOffsetModal(AxisSel axis) {
 	lv_obj_set_style_bg_color(modal_bg, lv_color_hex(0x000000), LV_PART_MAIN);
 	lv_obj_set_style_bg_opa(modal_bg, LV_OPA_COVER, LV_PART_MAIN);
 	lv_obj_set_style_bg_image_opa(modal_bg, LV_OPA_TRANSP, LV_PART_MAIN);
+	// Ensure no default/theme border/outline is visible.
+	lv_obj_set_style_border_width(modal_bg, 0, LV_PART_MAIN);
+	lv_obj_set_style_outline_width(modal_bg, 0, LV_PART_MAIN);
+	lv_obj_set_style_shadow_width(modal_bg, 0, LV_PART_MAIN);
 	lv_obj_add_flag(modal_bg, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_clear_flag(modal_bg, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scrollbar_mode(modal_bg, LV_SCROLLBAR_MODE_OFF);
@@ -270,14 +283,18 @@ void ModalManager::showOffsetModal(AxisSel axis) {
 	lv_obj_clear_flag(modal_win, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scrollbar_mode(modal_win, LV_SCROLLBAR_MODE_OFF);
 
-	lv_obj_set_style_pad_all(modal_win, 12, 0);
-	lv_obj_set_style_pad_gap(modal_win, 10, 0);
+	// Keep a little breathing room, but minimize edge padding.
+	lv_obj_set_style_pad_all(modal_win, 6, 0);
+	lv_obj_set_style_pad_gap(modal_win, 6, 0);
 	// Force window background fully opaque too.
 	lv_obj_set_style_bg_color(modal_win, lv_color_hex(0x000000), LV_PART_MAIN);
 	lv_obj_set_style_bg_opa(modal_win, LV_OPA_COVER, LV_PART_MAIN);
 	lv_obj_set_style_bg_image_opa(modal_win, LV_OPA_TRANSP, LV_PART_MAIN);
-	lv_obj_set_style_border_width(modal_win, 0, 0);
-	lv_obj_set_style_radius(modal_win, 0, 0);
+	// Ensure no default/theme border/outline/shadow is visible.
+	lv_obj_set_style_border_width(modal_win, 0, LV_PART_MAIN);
+	lv_obj_set_style_outline_width(modal_win, 0, LV_PART_MAIN);
+	lv_obj_set_style_shadow_width(modal_win, 0, LV_PART_MAIN);
+	lv_obj_set_style_radius(modal_win, 0, LV_PART_MAIN);
 
 	lv_obj_set_flex_flow(modal_win, LV_FLEX_FLOW_COLUMN);
 
@@ -389,9 +406,9 @@ void ModalManager::showOffsetModal(AxisSel axis) {
 	lv_obj_add_event_cb(btn_t, onSetTool, LV_EVENT_CLICKED, nullptr);
     // Filled red
     lv_obj_set_style_bg_opa(btn_t, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(btn_t, lv_palette_main(LV_PALETTE_RED), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(btn_t, lv_palette_darken(LV_PALETTE_RED, 2), LV_PART_MAIN);
 	lv_obj_set_style_border_width(btn_t, 1, LV_PART_MAIN);
-	lv_obj_set_style_border_color(btn_t, lv_palette_main(LV_PALETTE_RED), LV_PART_MAIN);
+	lv_obj_set_style_border_color(btn_t, lv_palette_darken(LV_PALETTE_RED, 2), LV_PART_MAIN);
     lv_obj_set_style_text_color(btn_t, lv_color_white(), LV_PART_MAIN);
     lv_obj_t *lblt = lv_label_create(btn_t);
     char ttxt[8];
@@ -401,17 +418,17 @@ void ModalManager::showOffsetModal(AxisSel axis) {
 
     apply_modal_button_common_style(btn_t);
 
-	lv_obj_set_style_bg_color(btn_t, lv_palette_darken(LV_PALETTE_RED, 2), LV_PART_MAIN | LV_STATE_PRESSED);
-	lv_obj_set_style_border_color(btn_t, lv_palette_darken(LV_PALETTE_RED, 2), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_bg_color(btn_t, lv_palette_darken(LV_PALETTE_RED, 3), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_border_color(btn_t, lv_palette_darken(LV_PALETTE_RED, 3), LV_PART_MAIN | LV_STATE_PRESSED);
 
 	lv_obj_t *btn_g = lv_btn_create(row);
 	lv_obj_set_size(btn_g, main_g_btn_w, 40);
 	lv_obj_add_event_cb(btn_g, onSetGlobal, LV_EVENT_CLICKED, nullptr);
     // Filled blue
     lv_obj_set_style_bg_opa(btn_g, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(btn_g, lv_palette_main(LV_PALETTE_BLUE), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(btn_g, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_MAIN);
 	lv_obj_set_style_border_width(btn_g, 1, LV_PART_MAIN);
-	lv_obj_set_style_border_color(btn_g, lv_palette_main(LV_PALETTE_BLUE), LV_PART_MAIN);
+	lv_obj_set_style_border_color(btn_g, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_MAIN);
     lv_obj_set_style_text_color(btn_g, lv_color_white(), LV_PART_MAIN);
     lv_obj_t *lblg = lv_label_create(btn_g);
     char gtxt[8];
@@ -421,8 +438,8 @@ void ModalManager::showOffsetModal(AxisSel axis) {
 
     apply_modal_button_common_style(btn_g);
 
-	lv_obj_set_style_bg_color(btn_g, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_MAIN | LV_STATE_PRESSED);
-	lv_obj_set_style_border_color(btn_g, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_bg_color(btn_g, lv_palette_darken(LV_PALETTE_BLUE, 3), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_border_color(btn_g, lv_palette_darken(LV_PALETTE_BLUE, 3), LV_PART_MAIN | LV_STATE_PRESSED);
 
 	// Custom numpad (3x4) + right-side CLEAR
 	kb = create_numpad(modal_win);
@@ -438,6 +455,10 @@ void ModalManager::showPitchModal() {
 	lv_obj_set_style_bg_color(modal_bg, lv_color_hex(0x000000), LV_PART_MAIN);
 	lv_obj_set_style_bg_opa(modal_bg, LV_OPA_COVER, LV_PART_MAIN);
 	lv_obj_set_style_bg_image_opa(modal_bg, LV_OPA_TRANSP, LV_PART_MAIN);
+	// Ensure no default/theme border/outline is visible.
+	lv_obj_set_style_border_width(modal_bg, 0, LV_PART_MAIN);
+	lv_obj_set_style_outline_width(modal_bg, 0, LV_PART_MAIN);
+	lv_obj_set_style_shadow_width(modal_bg, 0, LV_PART_MAIN);
 	lv_obj_add_flag(modal_bg, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_clear_flag(modal_bg, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scrollbar_mode(modal_bg, LV_SCROLLBAR_MODE_OFF);
@@ -448,14 +469,18 @@ void ModalManager::showPitchModal() {
 	lv_obj_clear_flag(modal_win, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scrollbar_mode(modal_win, LV_SCROLLBAR_MODE_OFF);
 
-	lv_obj_set_style_pad_all(modal_win, 12, 0);
-	lv_obj_set_style_pad_gap(modal_win, 10, 0);
+	// Keep a little breathing room, but minimize edge padding.
+	lv_obj_set_style_pad_all(modal_win, 6, 0);
+	lv_obj_set_style_pad_gap(modal_win, 6, 0);
 	// Force window background fully opaque too.
 	lv_obj_set_style_bg_color(modal_win, lv_color_hex(0x000000), LV_PART_MAIN);
 	lv_obj_set_style_bg_opa(modal_win, LV_OPA_COVER, LV_PART_MAIN);
 	lv_obj_set_style_bg_image_opa(modal_win, LV_OPA_TRANSP, LV_PART_MAIN);
-	lv_obj_set_style_border_width(modal_win, 0, 0);
-	lv_obj_set_style_radius(modal_win, 0, 0);
+	// Ensure no default/theme border/outline/shadow is visible.
+	lv_obj_set_style_border_width(modal_win, 0, LV_PART_MAIN);
+	lv_obj_set_style_outline_width(modal_win, 0, LV_PART_MAIN);
+	lv_obj_set_style_shadow_width(modal_win, 0, LV_PART_MAIN);
+	lv_obj_set_style_radius(modal_win, 0, LV_PART_MAIN);
 
 	lv_obj_set_flex_flow(modal_win, LV_FLEX_FLOW_COLUMN);
 
@@ -543,9 +568,9 @@ void ModalManager::showPitchModal() {
 	lv_obj_set_size(btn_ok, main_g_btn_w, 40);
 	lv_obj_add_event_cb(btn_ok, onPitchOk, LV_EVENT_CLICKED, nullptr);
     lv_obj_set_style_bg_opa(btn_ok, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(btn_ok, lv_palette_main(LV_PALETTE_BLUE), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(btn_ok, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_MAIN);
 	lv_obj_set_style_border_width(btn_ok, 1, LV_PART_MAIN);
-	lv_obj_set_style_border_color(btn_ok, lv_palette_main(LV_PALETTE_BLUE), LV_PART_MAIN);
+	lv_obj_set_style_border_color(btn_ok, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_MAIN);
     lv_obj_set_style_text_color(btn_ok, lv_color_white(), LV_PART_MAIN);
     lv_obj_t *lblo = lv_label_create(btn_ok);
     lv_label_set_text(lblo, "OK");
@@ -553,8 +578,8 @@ void ModalManager::showPitchModal() {
 
     apply_modal_button_common_style(btn_ok);
 
-	lv_obj_set_style_bg_color(btn_ok, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_MAIN | LV_STATE_PRESSED);
-	lv_obj_set_style_border_color(btn_ok, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_bg_color(btn_ok, lv_palette_darken(LV_PALETTE_BLUE, 3), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_border_color(btn_ok, lv_palette_darken(LV_PALETTE_BLUE, 3), LV_PART_MAIN | LV_STATE_PRESSED);
 
 	kb = create_numpad(modal_win);
 }

@@ -195,12 +195,12 @@ void UIManager::createUI() {
 		lv_obj_set_style_text_color(btn, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_MAIN | LV_STATE_PRESSED);
 
 		lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_CHECKED);
-        lv_obj_set_style_bg_color(btn, lv_palette_main(LV_PALETTE_BLUE), LV_PART_MAIN | LV_STATE_CHECKED);
-        lv_obj_set_style_border_color(btn, lv_palette_main(LV_PALETTE_BLUE), LV_PART_MAIN | LV_STATE_CHECKED);
-        lv_obj_set_style_text_color(btn, lv_color_white(), LV_PART_MAIN | LV_STATE_CHECKED);
+		lv_obj_set_style_bg_color(btn, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_MAIN | LV_STATE_CHECKED);
+		lv_obj_set_style_border_color(btn, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_MAIN | LV_STATE_CHECKED);
+		lv_obj_set_style_text_color(btn, lv_color_white(), LV_PART_MAIN | LV_STATE_CHECKED);
 
-		lv_obj_set_style_bg_color(btn, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
-		lv_obj_set_style_border_color(btn, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+		lv_obj_set_style_bg_color(btn, lv_palette_darken(LV_PALETTE_BLUE, 3), LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+		lv_obj_set_style_border_color(btn, lv_palette_darken(LV_PALETTE_BLUE, 3), LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
 
 		apply_button_common_style(btn);
 
@@ -344,21 +344,21 @@ void UIManager::createUI() {
 
     // Off = green, On = red
     lv_obj_set_style_bg_opa(btn_els, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(btn_els, lv_palette_main(LV_PALETTE_GREEN), LV_PART_MAIN);
+	lv_obj_set_style_bg_color(btn_els, lv_palette_darken(LV_PALETTE_GREEN, 2), LV_PART_MAIN);
 	lv_obj_set_style_border_width(btn_els, 1, LV_PART_MAIN);
-	lv_obj_set_style_border_color(btn_els, lv_palette_main(LV_PALETTE_GREEN), LV_PART_MAIN);
-    lv_obj_set_style_text_color(btn_els, lv_color_white(), LV_PART_MAIN);
+	lv_obj_set_style_border_color(btn_els, lv_palette_darken(LV_PALETTE_GREEN, 2), LV_PART_MAIN);
+	lv_obj_set_style_text_color(btn_els, lv_color_white(), LV_PART_MAIN);
 
-	lv_obj_set_style_bg_color(btn_els, lv_palette_darken(LV_PALETTE_GREEN, 2), LV_PART_MAIN | LV_STATE_PRESSED);
-	lv_obj_set_style_border_color(btn_els, lv_palette_darken(LV_PALETTE_GREEN, 2), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_bg_color(btn_els, lv_palette_darken(LV_PALETTE_GREEN, 3), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_border_color(btn_els, lv_palette_darken(LV_PALETTE_GREEN, 3), LV_PART_MAIN | LV_STATE_PRESSED);
 
 	lv_obj_set_style_bg_opa(btn_els, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_CHECKED);
-    lv_obj_set_style_bg_color(btn_els, lv_palette_main(LV_PALETTE_RED), LV_PART_MAIN | LV_STATE_CHECKED);
-    lv_obj_set_style_border_color(btn_els, lv_palette_main(LV_PALETTE_RED), LV_PART_MAIN | LV_STATE_CHECKED);
-    lv_obj_set_style_text_color(btn_els, lv_color_white(), LV_PART_MAIN | LV_STATE_CHECKED);
+	lv_obj_set_style_bg_color(btn_els, lv_palette_darken(LV_PALETTE_RED, 2), LV_PART_MAIN | LV_STATE_CHECKED);
+	lv_obj_set_style_border_color(btn_els, lv_palette_darken(LV_PALETTE_RED, 2), LV_PART_MAIN | LV_STATE_CHECKED);
+	lv_obj_set_style_text_color(btn_els, lv_color_white(), LV_PART_MAIN | LV_STATE_CHECKED);
 
-	lv_obj_set_style_bg_color(btn_els, lv_palette_darken(LV_PALETTE_RED, 2), LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
-	lv_obj_set_style_border_color(btn_els, lv_palette_darken(LV_PALETTE_RED, 2), LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+	lv_obj_set_style_bg_color(btn_els, lv_palette_darken(LV_PALETTE_RED, 3), LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+	lv_obj_set_style_border_color(btn_els, lv_palette_darken(LV_PALETTE_RED, 3), LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
 
 	apply_button_common_style(btn_els);
 
@@ -431,12 +431,12 @@ void UIManager::createUI() {
 		lv_obj_set_style_text_color(btn, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_MAIN | LV_STATE_PRESSED);
 
 		lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_CHECKED);
-        lv_obj_set_style_bg_color(btn, lv_palette_main(LV_PALETTE_RED), LV_PART_MAIN | LV_STATE_CHECKED);
-        lv_obj_set_style_border_color(btn, lv_palette_main(LV_PALETTE_RED), LV_PART_MAIN | LV_STATE_CHECKED);
-        lv_obj_set_style_text_color(btn, lv_color_white(), LV_PART_MAIN | LV_STATE_CHECKED);
+		lv_obj_set_style_bg_color(btn, lv_palette_darken(LV_PALETTE_RED, 2), LV_PART_MAIN | LV_STATE_CHECKED);
+		lv_obj_set_style_border_color(btn, lv_palette_darken(LV_PALETTE_RED, 2), LV_PART_MAIN | LV_STATE_CHECKED);
+		lv_obj_set_style_text_color(btn, lv_color_white(), LV_PART_MAIN | LV_STATE_CHECKED);
 
-		lv_obj_set_style_bg_color(btn, lv_palette_darken(LV_PALETTE_RED, 2), LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
-		lv_obj_set_style_border_color(btn, lv_palette_darken(LV_PALETTE_RED, 2), LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+		lv_obj_set_style_bg_color(btn, lv_palette_darken(LV_PALETTE_RED, 3), LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+		lv_obj_set_style_border_color(btn, lv_palette_darken(LV_PALETTE_RED, 3), LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
 
 		apply_button_common_style(btn);
 
@@ -560,8 +560,8 @@ void UIManager::update() {
             lv_obj_set_style_text_color(lbl_x_unit, lv_palette_main(LV_PALETTE_ORANGE), LV_PART_MAIN);
         } else {
             lv_label_set_text(lbl_x_unit, "dia");
-            lv_obj_set_style_text_color(lbl_x_unit, lv_palette_main(LV_PALETTE_BLUE), LV_PART_MAIN);
-        }
+			lv_obj_set_style_text_color(lbl_x_unit, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_MAIN);
+		}
     }
 
     if (lbl_z_unit) {
@@ -570,8 +570,8 @@ void UIManager::update() {
             lv_obj_set_style_text_color(lbl_z_unit, lv_palette_main(LV_PALETTE_ORANGE), LV_PART_MAIN);
         } else {
             lv_label_set_text(lbl_z_unit, "pos");
-            lv_obj_set_style_text_color(lbl_z_unit, lv_palette_main(LV_PALETTE_BLUE), LV_PART_MAIN);
-        }
+			lv_obj_set_style_text_color(lbl_z_unit, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_MAIN);
+		}
     }
 
     const int tool = ToolManager::getCurrentTool();
@@ -593,8 +593,8 @@ void UIManager::update() {
         lv_label_set_text(lbl_c, buf);
         if (lbl_c_unit) {
             lv_label_set_text(lbl_c_unit, "RPM");
-            lv_obj_set_style_text_color(lbl_c_unit, lv_palette_main(LV_PALETTE_RED), LV_PART_MAIN);
-        }
+			lv_obj_set_style_text_color(lbl_c_unit, lv_palette_darken(LV_PALETTE_RED, 2), LV_PART_MAIN);
+		}
     } else {
         int32_t deg_x100 = CoordinateSystem::ticksToDegX100(c_phase);
         CoordinateSystem::formatDeg(buf, sizeof(buf), deg_x100);
@@ -602,8 +602,8 @@ void UIManager::update() {
 
         if (lbl_c_unit) {
             lv_label_set_text(lbl_c_unit, "deg");
-            lv_obj_set_style_text_color(lbl_c_unit, lv_palette_main(LV_PALETTE_GREEN), LV_PART_MAIN);
-        }
+			lv_obj_set_style_text_color(lbl_c_unit, lv_palette_darken(LV_PALETTE_GREEN, 2), LV_PART_MAIN);
+		}
     }
 
     if (lbl_units_mode) {
