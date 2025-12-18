@@ -5,7 +5,8 @@
 #include "driver/gpio.h"
 
 pcnt_unit_handle_t EncoderManager::c_pcnt_unit = nullptr;
-pcnt_channel_handle_t EncoderManager::c_pcnt_chan = nullptr;
+pcnt_channel_handle_t EncoderManager::c_pcnt_chan_a = nullptr;
+pcnt_channel_handle_t EncoderManager::c_pcnt_chan_b = nullptr;
 volatile int32_t EncoderManager::c_pcnt_accum = 0;
 
 int32_t EncoderManager::c_raw_ticks = 0;
@@ -117,26 +118,52 @@ bool EncoderManager::init() {
     esp_err_t err = pcnt_new_unit(&unit_config, &c_pcnt_unit);
     if (err != ESP_OK) return false;
 
-    pcnt_chan_config_t chan_config = {};
-    chan_config.edge_gpio_num = C_PINA;   // pulses on A
-    chan_config.level_gpio_num = C_PINB;  // direction from B level
+    // True quadrature (x4) decoding using 2 PCNT channels.
+    // Channel A counts edges on A and uses B level for direction.
+    // Channel B counts edges on B and uses A level for direction (with inverted level mapping).
+    // The unit count is the sum of both channels.
 
-    err = pcnt_new_channel(c_pcnt_unit, &chan_config, &c_pcnt_chan);
+    pcnt_chan_config_t chan_a_config = {};
+    chan_a_config.edge_gpio_num = C_PINA;   // edges on A
+    chan_a_config.level_gpio_num = C_PINB;  // direction from B level
+
+    err = pcnt_new_channel(c_pcnt_unit, &chan_a_config, &c_pcnt_chan_a);
     if (err != ESP_OK) return false;
 
-    // x2 decoding: count both rising and falling edges on A
-    // Direction determined by B (level action inverts)
     err = pcnt_channel_set_edge_action(
-        c_pcnt_chan,
+        c_pcnt_chan_a,
         PCNT_CHANNEL_EDGE_ACTION_INCREASE, // rising edge
         PCNT_CHANNEL_EDGE_ACTION_DECREASE  // falling edge
     );
     if (err != ESP_OK) return false;
 
     err = pcnt_channel_set_level_action(
-        c_pcnt_chan,
+        c_pcnt_chan_a,
         PCNT_CHANNEL_LEVEL_ACTION_KEEP,    // when B low
         PCNT_CHANNEL_LEVEL_ACTION_INVERSE  // when B high -> invert direction
+    );
+    if (err != ESP_OK) return false;
+
+    pcnt_chan_config_t chan_b_config = {};
+    chan_b_config.edge_gpio_num = C_PINB;   // edges on B
+    chan_b_config.level_gpio_num = C_PINA;  // direction from A level
+
+    err = pcnt_new_channel(c_pcnt_unit, &chan_b_config, &c_pcnt_chan_b);
+    if (err != ESP_OK) return false;
+
+    err = pcnt_channel_set_edge_action(
+        c_pcnt_chan_b,
+        PCNT_CHANNEL_EDGE_ACTION_INCREASE, // rising edge
+        PCNT_CHANNEL_EDGE_ACTION_DECREASE  // falling edge
+    );
+    if (err != ESP_OK) return false;
+
+    // Note: This level mapping is intentionally opposite of chan_a.
+    // It makes both channels agree on direction for a given rotation.
+    err = pcnt_channel_set_level_action(
+        c_pcnt_chan_b,
+        PCNT_CHANNEL_LEVEL_ACTION_INVERSE, // when A low
+        PCNT_CHANNEL_LEVEL_ACTION_KEEP     // when A high
     );
     if (err != ESP_OK) return false;
 

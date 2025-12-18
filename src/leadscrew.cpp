@@ -162,11 +162,11 @@ void LeadscrewManager::formatPitchLabel(char *out, size_t n) {
     // Display as pitch length (unitless): mm/rev in MM mode, inches/rev in INCH mode.
     if (CoordinateSystem::isLinearInchMode()) {
         const float inches = (float)pitch_um / 25400.0f;
-        snprintf(out, n, "%.4f", inches);
-    } else {
+		snprintf(out, n, "%.3f", inches);
+	} else {
         const float mm = (float)pitch_um / 1000.0f;
-        snprintf(out, n, "%.3f", mm);
-    }
+		snprintf(out, n, "%.2f", mm);
+	}
 }
 
 void LeadscrewManager::stepTask(void *arg) {

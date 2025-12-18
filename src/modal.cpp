@@ -387,11 +387,11 @@ void ModalManager::showOffsetModal(AxisSel axis) {
     lv_obj_t *btn_t = lv_btn_create(row);
 	lv_obj_set_size(btn_t, main_g_btn_w, 40);
 	lv_obj_add_event_cb(btn_t, onSetTool, LV_EVENT_CLICKED, nullptr);
-    // Filled red
+    // Filled orange
     lv_obj_set_style_bg_opa(btn_t, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(btn_t, lv_palette_darken(LV_PALETTE_RED, 2), LV_PART_MAIN);
+	lv_obj_set_style_bg_color(btn_t, lv_palette_darken(LV_PALETTE_ORANGE, 2), LV_PART_MAIN);
 	lv_obj_set_style_border_width(btn_t, 1, LV_PART_MAIN);
-	lv_obj_set_style_border_color(btn_t, lv_palette_darken(LV_PALETTE_RED, 2), LV_PART_MAIN);
+	lv_obj_set_style_border_color(btn_t, lv_palette_darken(LV_PALETTE_ORANGE, 2), LV_PART_MAIN);
     lv_obj_set_style_text_color(btn_t, lv_color_white(), LV_PART_MAIN);
     lv_obj_t *lblt = lv_label_create(btn_t);
     char ttxt[8];
@@ -401,8 +401,8 @@ void ModalManager::showOffsetModal(AxisSel axis) {
 
     apply_modal_button_common_style(btn_t);
 
-	lv_obj_set_style_bg_color(btn_t, lv_palette_darken(LV_PALETTE_RED, 3), LV_PART_MAIN | LV_STATE_PRESSED);
-	lv_obj_set_style_border_color(btn_t, lv_palette_darken(LV_PALETTE_RED, 3), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_bg_color(btn_t, lv_palette_darken(LV_PALETTE_ORANGE, 3), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_border_color(btn_t, lv_palette_darken(LV_PALETTE_ORANGE, 3), LV_PART_MAIN | LV_STATE_PRESSED);
 
 	lv_obj_t *btn_g = lv_btn_create(row);
 	lv_obj_set_size(btn_g, main_g_btn_w, 40);
@@ -537,10 +537,10 @@ void ModalManager::showPitchModal() {
     } else {
         if (CoordinateSystem::isLinearInchMode()) {
             float inches = (float)LeadscrewManager::getPitchUm() / 25400.0f;
-            snprintf(pbuf, sizeof(pbuf), "%.4f", inches);
+            snprintf(pbuf, sizeof(pbuf), "%.3f", inches);
         } else {
             float mm = (float)LeadscrewManager::getPitchUm() / 1000.0f;
-            snprintf(pbuf, sizeof(pbuf), "%.3f", mm);
+            snprintf(pbuf, sizeof(pbuf), "%.2f", mm);
         }
     }
 	trim_trailing_zeros_inplace(pbuf);

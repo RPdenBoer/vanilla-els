@@ -20,7 +20,8 @@ public:
     
 private:
     static pcnt_unit_handle_t c_pcnt_unit;
-    static pcnt_channel_handle_t c_pcnt_chan;
+    static pcnt_channel_handle_t c_pcnt_chan_a;
+    static pcnt_channel_handle_t c_pcnt_chan_b;
     static volatile int32_t c_pcnt_accum;
     
     static int32_t c_raw_ticks;
