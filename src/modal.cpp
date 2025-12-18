@@ -382,24 +382,7 @@ void ModalManager::showOffsetModal(AxisSel axis) {
 		}
 	}
 
-	lv_obj_t *btn_x = lv_btn_create(row);
 	const int main_g_btn_w = OffsetManager::getMainOffsetButtonWidth();
-	lv_obj_set_size(btn_x, main_g_btn_w, 40);
-	lv_obj_add_event_cb(btn_x, onCancel, LV_EVENT_CLICKED, nullptr);
-    // Ghost style
-    lv_obj_set_style_bg_opa(btn_x, LV_OPA_TRANSP, LV_PART_MAIN);
-	lv_obj_set_style_border_width(btn_x, 1, LV_PART_MAIN);
-	lv_obj_set_style_border_color(btn_x, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
-    lv_obj_set_style_text_color(btn_x, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
-	lv_obj_set_style_bg_opa(btn_x, LV_OPA_20, LV_PART_MAIN | LV_STATE_PRESSED);
-	lv_obj_set_style_bg_color(btn_x, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN | LV_STATE_PRESSED);
-	lv_obj_set_style_border_color(btn_x, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_MAIN | LV_STATE_PRESSED);
-	lv_obj_set_style_text_color(btn_x, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_MAIN | LV_STATE_PRESSED);
-	lv_obj_t *lblx = lv_label_create(btn_x);
-    lv_label_set_text(lblx, "X");
-    lv_obj_center(lblx);
-
-    apply_modal_button_common_style(btn_x);
 
     lv_obj_t *btn_t = lv_btn_create(row);
 	lv_obj_set_size(btn_t, main_g_btn_w, 40);
@@ -440,6 +423,24 @@ void ModalManager::showOffsetModal(AxisSel axis) {
 
 	lv_obj_set_style_bg_color(btn_g, lv_palette_darken(LV_PALETTE_BLUE, 3), LV_PART_MAIN | LV_STATE_PRESSED);
 	lv_obj_set_style_border_color(btn_g, lv_palette_darken(LV_PALETTE_BLUE, 3), LV_PART_MAIN | LV_STATE_PRESSED);
+
+	lv_obj_t *btn_x = lv_btn_create(row);
+	lv_obj_set_size(btn_x, main_g_btn_w, 40);
+	lv_obj_add_event_cb(btn_x, onCancel, LV_EVENT_CLICKED, nullptr);
+    // Ghost style
+    lv_obj_set_style_bg_opa(btn_x, LV_OPA_TRANSP, LV_PART_MAIN);
+	lv_obj_set_style_border_width(btn_x, 1, LV_PART_MAIN);
+	lv_obj_set_style_border_color(btn_x, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(btn_x, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+	lv_obj_set_style_bg_opa(btn_x, LV_OPA_20, LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_bg_color(btn_x, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_border_color(btn_x, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_text_color(btn_x, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_t *lblx = lv_label_create(btn_x);
+    lv_label_set_text(lblx, "X");
+    lv_obj_center(lblx);
+
+    apply_modal_button_common_style(btn_x);
 
 	// Custom numpad (3x4) + right-side CLEAR
 	kb = create_numpad(modal_win);
@@ -545,24 +546,7 @@ void ModalManager::showPitchModal() {
 	trim_trailing_zeros_inplace(pbuf);
 	lv_textarea_set_text(ta_value, pbuf);
 
-    lv_obj_t *btn_x = lv_btn_create(row);
 	const int main_g_btn_w = OffsetManager::getMainOffsetButtonWidth();
-	lv_obj_set_size(btn_x, main_g_btn_w, 40);
-	lv_obj_add_event_cb(btn_x, onCancel, LV_EVENT_CLICKED, nullptr);
-    // Ghost style
-    lv_obj_set_style_bg_opa(btn_x, LV_OPA_TRANSP, LV_PART_MAIN);
-	lv_obj_set_style_border_width(btn_x, 1, LV_PART_MAIN);
-	lv_obj_set_style_border_color(btn_x, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
-    lv_obj_set_style_text_color(btn_x, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
-	lv_obj_set_style_bg_opa(btn_x, LV_OPA_20, LV_PART_MAIN | LV_STATE_PRESSED);
-	lv_obj_set_style_bg_color(btn_x, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN | LV_STATE_PRESSED);
-	lv_obj_set_style_border_color(btn_x, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_MAIN | LV_STATE_PRESSED);
-	lv_obj_set_style_text_color(btn_x, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_MAIN | LV_STATE_PRESSED);
-	lv_obj_t *lblx = lv_label_create(btn_x);
-    lv_label_set_text(lblx, "X");
-    lv_obj_center(lblx);
-
-    apply_modal_button_common_style(btn_x);
 
     lv_obj_t *btn_ok = lv_btn_create(row);
 	lv_obj_set_size(btn_ok, main_g_btn_w, 40);
@@ -580,6 +564,24 @@ void ModalManager::showPitchModal() {
 
 	lv_obj_set_style_bg_color(btn_ok, lv_palette_darken(LV_PALETTE_BLUE, 3), LV_PART_MAIN | LV_STATE_PRESSED);
 	lv_obj_set_style_border_color(btn_ok, lv_palette_darken(LV_PALETTE_BLUE, 3), LV_PART_MAIN | LV_STATE_PRESSED);
+
+    lv_obj_t *btn_x = lv_btn_create(row);
+	lv_obj_set_size(btn_x, main_g_btn_w, 40);
+	lv_obj_add_event_cb(btn_x, onCancel, LV_EVENT_CLICKED, nullptr);
+    // Ghost style
+    lv_obj_set_style_bg_opa(btn_x, LV_OPA_TRANSP, LV_PART_MAIN);
+	lv_obj_set_style_border_width(btn_x, 1, LV_PART_MAIN);
+	lv_obj_set_style_border_color(btn_x, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(btn_x, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+	lv_obj_set_style_bg_opa(btn_x, LV_OPA_20, LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_bg_color(btn_x, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_border_color(btn_x, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_text_color(btn_x, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_t *lblx = lv_label_create(btn_x);
+    lv_label_set_text(lblx, "X");
+    lv_obj_center(lblx);
+
+    apply_modal_button_common_style(btn_x);
 
 	kb = create_numpad(modal_win);
 }
