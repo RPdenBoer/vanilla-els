@@ -6,6 +6,189 @@
 #include "config.h"
 #include "leadscrew.h"
 
+#include <cstring>
+
+// Safely disable LVGL theme transitions (press animations) by providing
+// a valid transition descriptor with 0ms duration.
+static const lv_style_prop_t NO_TRANS_PROPS[] = {0};
+static const lv_style_transition_dsc_t NO_TRANSITION = {
+	.props = NO_TRANS_PROPS,
+	.user_data = nullptr,
+	.path_xcb = lv_anim_path_linear,
+	.time = 0,
+	.delay = 0,
+};
+
+static void apply_modal_button_common_style(lv_obj_t *btn);
+
+static lv_color_t modal_accent_blue_grey()
+{
+	// Matches the keypad button base color.
+	return lv_palette_darken(LV_PALETTE_BLUE_GREY, 3);
+}
+
+static void trim_trailing_zeros_inplace(char *s)
+{
+	if (!s || s[0] == '\0')
+		return;
+
+	char *dot = strchr(s, '.');
+	if (!dot)
+		return;
+
+	char *end = s + strlen(s) - 1;
+	while (end > dot && *end == '0')
+	{
+		*end-- = '\0';
+	}
+	if (end == dot)
+	{
+		*end = '\0';
+	}
+
+	// Normalize "-0" to "0" for nicer display.
+	if (strcmp(s, "-0") == 0)
+	{
+		s[0] = '0';
+		s[1] = '\0';
+	}
+}
+
+static void apply_numpad_key_style(lv_obj_t *btn)
+{
+	if (!btn)
+		return;
+
+	// Keypad style: blue/grey blocks like the default keyboard, no borders.
+	lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, LV_PART_MAIN);
+	// Darker base so white numerals are more legible.
+	lv_obj_set_style_bg_color(btn, modal_accent_blue_grey(), LV_PART_MAIN);
+	lv_obj_set_style_text_color(btn, lv_color_white(), LV_PART_MAIN);
+	lv_obj_set_style_border_width(btn, 0, LV_PART_MAIN);
+
+	// Slightly reduced radius only for keypad buttons.
+	lv_obj_set_style_radius(btn, 6, LV_PART_MAIN);
+
+	// Press feedback: subtle color change, consistent with other buttons (avoid going black).
+	lv_obj_set_style_bg_color(btn, lv_palette_darken(LV_PALETTE_BLUE_GREY, 4), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_border_width(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_radius(btn, 6, LV_PART_MAIN | LV_STATE_PRESSED);
+
+	// Ensure no grow/anim artifacts
+	apply_modal_button_common_style(btn);
+	lv_obj_set_style_border_width(btn, 0, LV_PART_MAIN);
+	lv_obj_set_style_border_width(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_border_width(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+	lv_obj_set_style_radius(btn, 6, LV_PART_MAIN);
+	lv_obj_set_style_radius(btn, 6, LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_radius(btn, 6, LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+}
+
+static lv_obj_t *create_numpad(lv_obj_t *parent)
+{
+	// Container: keypad grid + right-side Clear button
+	lv_obj_t *pad_row = lv_obj_create(parent);
+	lv_obj_set_width(pad_row, LV_PCT(100));
+	lv_obj_set_flex_grow(pad_row, 1);
+	lv_obj_clear_flag(pad_row, LV_OBJ_FLAG_SCROLLABLE);
+	lv_obj_set_scrollbar_mode(pad_row, LV_SCROLLBAR_MODE_OFF);
+	lv_obj_set_style_bg_opa(pad_row, LV_OPA_TRANSP, 0);
+	lv_obj_set_style_border_width(pad_row, 0, 0);
+	lv_obj_set_style_pad_all(pad_row, 0, 0);
+	lv_obj_set_style_pad_gap(pad_row, 2, 0);
+	lv_obj_set_flex_flow(pad_row, LV_FLEX_FLOW_ROW);
+
+	// 3x4 grid
+	lv_obj_t *grid = lv_obj_create(pad_row);
+	lv_obj_set_flex_grow(grid, 1);
+	lv_obj_set_height(grid, LV_PCT(100));
+	lv_obj_clear_flag(grid, LV_OBJ_FLAG_SCROLLABLE);
+	lv_obj_set_scrollbar_mode(grid, LV_SCROLLBAR_MODE_OFF);
+	lv_obj_set_style_bg_opa(grid, LV_OPA_TRANSP, 0);
+	lv_obj_set_style_border_width(grid, 0, 0);
+	lv_obj_set_style_pad_all(grid, 0, 0);
+	// Tighter spacing between keypad buttons
+	lv_obj_set_style_pad_row(grid, 1, 0);
+	lv_obj_set_style_pad_column(grid, 1, 0);
+
+	static int32_t col_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
+	static int32_t row_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
+	lv_obj_set_layout(grid, LV_LAYOUT_GRID);
+	lv_obj_set_grid_dsc_array(grid, col_dsc, row_dsc);
+
+	auto make_key = [&](int col, int row, const char *txt, int keycode)
+	{
+		lv_obj_t *btn = lv_btn_create(grid);
+		lv_obj_set_grid_cell(btn, LV_GRID_ALIGN_STRETCH, col, 1, LV_GRID_ALIGN_STRETCH, row, 1);
+		lv_obj_clear_flag(btn, LV_OBJ_FLAG_SCROLLABLE);
+		lv_obj_set_scrollbar_mode(btn, LV_SCROLLBAR_MODE_OFF);
+		// Match other buttons: act on release.
+		lv_obj_add_event_cb(btn, ModalManager::onNumpadKey, LV_EVENT_CLICKED, (void *)(intptr_t)keycode);
+		apply_numpad_key_style(btn);
+
+		lv_obj_t *lbl = lv_label_create(btn);
+		lv_label_set_text(lbl, txt);
+		lv_obj_center(lbl);
+		return btn;
+	};
+
+	// Typical numeric keypad layout
+	// Row 0
+	make_key(0, 0, "7", '7');
+	make_key(1, 0, "8", '8');
+	make_key(2, 0, "9", '9');
+	// Row 1
+	make_key(0, 1, "4", '4');
+	make_key(1, 1, "5", '5');
+	make_key(2, 1, "6", '6');
+	// Row 2
+	make_key(0, 2, "1", '1');
+	make_key(1, 2, "2", '2');
+	make_key(2, 2, "3", '3');
+	// Row 3: +/- 0 .
+	make_key(0, 3, "+/-", '-');
+	make_key(1, 3, "0", '0');
+	make_key(2, 3, ".", '.');
+
+	// Right column: Backspace above Clear (share the vertical space)
+	lv_obj_t *right_col = lv_obj_create(pad_row);
+	lv_obj_set_width(right_col, 92);
+	lv_obj_set_height(right_col, LV_PCT(100));
+	lv_obj_clear_flag(right_col, LV_OBJ_FLAG_SCROLLABLE);
+	lv_obj_set_scrollbar_mode(right_col, LV_SCROLLBAR_MODE_OFF);
+	lv_obj_set_style_bg_opa(right_col, LV_OPA_TRANSP, 0);
+	lv_obj_set_style_border_width(right_col, 0, 0);
+	lv_obj_set_style_pad_all(right_col, 0, 0);
+	lv_obj_set_style_pad_gap(right_col, 1, 0);
+	lv_obj_set_flex_flow(right_col, LV_FLEX_FLOW_COLUMN);
+
+	lv_obj_t *btn_bs = lv_btn_create(right_col);
+	lv_obj_set_width(btn_bs, LV_PCT(100));
+	lv_obj_set_flex_grow(btn_bs, 1);
+	lv_obj_clear_flag(btn_bs, LV_OBJ_FLAG_SCROLLABLE);
+	lv_obj_set_scrollbar_mode(btn_bs, LV_SCROLLBAR_MODE_OFF);
+	lv_obj_add_event_cb(btn_bs, ModalManager::onNumpadBackspace, LV_EVENT_CLICKED, nullptr);
+	apply_numpad_key_style(btn_bs);
+	lv_obj_t *lblbs = lv_label_create(btn_bs);
+	lv_label_set_text(lblbs, "DEL");
+	lv_obj_center(lblbs);
+
+	lv_obj_t *btn_clear = lv_btn_create(right_col);
+	lv_obj_set_width(btn_clear, LV_PCT(100));
+	lv_obj_set_flex_grow(btn_clear, 1);
+	lv_obj_clear_flag(btn_clear, LV_OBJ_FLAG_SCROLLABLE);
+	lv_obj_set_scrollbar_mode(btn_clear, LV_SCROLLBAR_MODE_OFF);
+	lv_obj_add_event_cb(btn_clear, ModalManager::onNumpadClear, LV_EVENT_CLICKED, nullptr);
+	apply_numpad_key_style(btn_clear);
+	lv_obj_t *lblc = lv_label_create(btn_clear);
+	lv_label_set_text(lblc, "CLEAR");
+	lv_obj_center(lblc);
+
+	// Reuse kb pointer name for legacy cleanup paths (it is just a container now).
+	return pad_row;
+}
+
 static void apply_modal_button_common_style(lv_obj_t *btn) {
     if (!btn) return;
     lv_obj_set_style_shadow_width(btn, 0, LV_PART_MAIN);
@@ -26,11 +209,37 @@ static void apply_modal_button_common_style(lv_obj_t *btn) {
 
     lv_obj_set_style_transform_scale_x(btn, 256, LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_set_style_transform_scale_y(btn, 256, LV_PART_MAIN | LV_STATE_PRESSED);
-    lv_obj_set_style_translate_x(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED);
+	// Default theme uses transform_width/height for the "grow" press effect.
+	lv_obj_set_style_transform_width(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_transform_height(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_translate_x(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_set_style_translate_y(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED);
 
     // Keep border stable on press to avoid clipping.
-    lv_obj_set_style_border_width(btn, 2, LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_border_width(btn, 1, LV_PART_MAIN | LV_STATE_PRESSED);
+
+	// Override more specific PRESSED|CHECKED styles too.
+	lv_obj_set_style_shadow_width(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+	lv_obj_set_style_outline_width(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+	lv_obj_set_style_outline_pad(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+	lv_obj_set_style_transform_scale_x(btn, 256, LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+	lv_obj_set_style_transform_scale_y(btn, 256, LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+	lv_obj_set_style_transform_width(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+	lv_obj_set_style_transform_height(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+	lv_obj_set_style_translate_x(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+	lv_obj_set_style_translate_y(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+	lv_obj_set_style_border_width(btn, 1, LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+
+	// Disable animations (safer than touching transition descriptors).
+	lv_obj_set_style_anim_duration(btn, 0, LV_PART_MAIN);
+	lv_obj_set_style_anim_duration(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_anim_duration(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+
+	// Also disable theme transitions explicitly.
+	lv_obj_set_style_transition(btn, &NO_TRANSITION, LV_PART_MAIN);
+	lv_obj_set_style_transition(btn, &NO_TRANSITION, LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_transition(btn, &NO_TRANSITION, LV_PART_MAIN | LV_STATE_CHECKED);
+	lv_obj_set_style_transition(btn, &NO_TRANSITION, LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
 }
 
 lv_obj_t *ModalManager::modal_bg = nullptr;
@@ -47,28 +256,30 @@ void ModalManager::showOffsetModal(AxisSel axis) {
 
     modal_bg = lv_obj_create(lv_layer_top());
     lv_obj_set_size(modal_bg, LV_PCT(100), LV_PCT(100));
-    lv_obj_set_style_bg_color(modal_bg, lv_color_hex(0x000000), 0);
-    lv_obj_set_style_bg_opa(modal_bg, LV_OPA_70, 0);
-    lv_obj_add_flag(modal_bg, LV_OBJ_FLAG_CLICKABLE);
+	// Force a fully opaque blackout overlay (avoid any theme alpha/gradient).
+	lv_obj_set_style_bg_color(modal_bg, lv_color_hex(0x000000), LV_PART_MAIN);
+	lv_obj_set_style_bg_opa(modal_bg, LV_OPA_COVER, LV_PART_MAIN);
+	lv_obj_set_style_bg_image_opa(modal_bg, LV_OPA_TRANSP, LV_PART_MAIN);
+	lv_obj_add_flag(modal_bg, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_clear_flag(modal_bg, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scrollbar_mode(modal_bg, LV_SCROLLBAR_MODE_OFF);
     lv_obj_set_style_pad_all(modal_bg, 0, 0);
 
     modal_win = lv_obj_create(modal_bg);
-    lv_obj_set_size(modal_win, 460, 250);
-    lv_obj_center(modal_win);
-    lv_obj_clear_flag(modal_win, LV_OBJ_FLAG_SCROLLABLE);
+	lv_obj_set_size(modal_win, LV_PCT(100), LV_PCT(100));
+	lv_obj_clear_flag(modal_win, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scrollbar_mode(modal_win, LV_SCROLLBAR_MODE_OFF);
 
-    lv_obj_set_style_pad_all(modal_win, 10, 0);
-    lv_obj_set_style_pad_gap(modal_win, 8, 0);
-    lv_obj_set_style_bg_color(modal_win, lv_color_hex(0x101010), 0);
-    lv_obj_set_style_bg_opa(modal_win, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(modal_win, lv_palette_main(LV_PALETTE_GREY), 0);
-    lv_obj_set_style_border_width(modal_win, 2, 0);
-    lv_obj_set_style_radius(modal_win, 10, 0);
+	lv_obj_set_style_pad_all(modal_win, 12, 0);
+	lv_obj_set_style_pad_gap(modal_win, 10, 0);
+	// Force window background fully opaque too.
+	lv_obj_set_style_bg_color(modal_win, lv_color_hex(0x000000), LV_PART_MAIN);
+	lv_obj_set_style_bg_opa(modal_win, LV_OPA_COVER, LV_PART_MAIN);
+	lv_obj_set_style_bg_image_opa(modal_win, LV_OPA_TRANSP, LV_PART_MAIN);
+	lv_obj_set_style_border_width(modal_win, 0, 0);
+	lv_obj_set_style_radius(modal_win, 0, 0);
 
-    lv_obj_set_flex_flow(modal_win, LV_FLEX_FLOW_COLUMN);
+	lv_obj_set_flex_flow(modal_win, LV_FLEX_FLOW_COLUMN);
 
     // Title
     lv_obj_t *title = lv_label_create(modal_win);
@@ -89,12 +300,13 @@ void ModalManager::showOffsetModal(AxisSel axis) {
         lv_label_set_text(title, "Set C (deg)");
     }
     lv_obj_set_style_text_font(title, &lv_font_montserrat_24, 0);
+	lv_obj_set_style_text_color(title, modal_accent_blue_grey(), 0);
 
-    // Row: textarea + X/T/G
+	// Row: textarea + X/T/G
     lv_obj_t *row = lv_obj_create(modal_win);
     lv_obj_set_width(row, LV_PCT(100));
-    lv_obj_set_height(row, 44);
-    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+	lv_obj_set_height(row, 56);
+	lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scrollbar_mode(row, LV_SCROLLBAR_MODE_OFF);
     lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(row, 0, 0);
@@ -104,39 +316,82 @@ void ModalManager::showOffsetModal(AxisSel axis) {
     lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     ta_value = lv_textarea_create(row);
-    lv_obj_set_height(ta_value, 44);
-    lv_obj_set_flex_grow(ta_value, 1);
+	lv_obj_set_height(ta_value, 56);
+	lv_obj_set_flex_grow(ta_value, 1);
     lv_textarea_set_one_line(ta_value, true);
     lv_textarea_set_cursor_click_pos(ta_value, true);
     lv_obj_clear_flag(ta_value, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scrollbar_mode(ta_value, LV_SCROLLBAR_MODE_OFF);
 
-    // Prefill zero (fastest path = press T or G)
-    if (axis == AXIS_C) lv_textarea_set_text(ta_value, "0.00");
-    else               lv_textarea_set_text(ta_value, CoordinateSystem::isLinearInchMode() ? "0.0000" : "0.000");
+	// Match pitch-value button font size
+	lv_obj_set_style_text_font(ta_value, &lv_font_montserrat_24, LV_PART_MAIN);
 
-    lv_obj_t *btn_x = lv_btn_create(row);
-    lv_obj_set_size(btn_x, 44, 44);
-    lv_obj_add_event_cb(btn_x, onCancel, LV_EVENT_CLICKED, nullptr);
+	// Remove textarea fill background
+	lv_obj_set_style_bg_opa(ta_value, LV_OPA_TRANSP, LV_PART_MAIN);
+	lv_obj_set_style_bg_opa(ta_value, LV_OPA_TRANSP, LV_PART_MAIN | LV_STATE_FOCUSED);
+	// Remove textarea border
+	lv_obj_set_style_border_width(ta_value, 0, LV_PART_MAIN);
+	lv_obj_set_style_border_width(ta_value, 0, LV_PART_MAIN | LV_STATE_FOCUSED);
+	lv_obj_set_style_outline_width(ta_value, 0, LV_PART_MAIN);
+	lv_obj_set_style_outline_width(ta_value, 0, LV_PART_MAIN | LV_STATE_FOCUSED);
+
+	// Start empty (no prefill)
+	// Prefill with the current displayed value (matches the DRO)
+	{
+		char buf[32];
+		const int tool = ToolManager::getCurrentTool();
+
+		if (axis == AXIS_X)
+		{
+			const int32_t disp_um = CoordinateSystem::getDisplayX(tool);
+			CoordinateSystem::formatLinear(buf, sizeof(buf), disp_um);
+			trim_trailing_zeros_inplace(buf);
+			lv_textarea_set_text(ta_value, buf);
+		}
+		else if (axis == AXIS_Z)
+		{
+			const int32_t disp_um = CoordinateSystem::getDisplayZ(tool);
+			CoordinateSystem::formatLinear(buf, sizeof(buf), disp_um);
+			trim_trailing_zeros_inplace(buf);
+			lv_textarea_set_text(ta_value, buf);
+		}
+		else
+		{
+			const int32_t ticks = CoordinateSystem::getDisplayC(EncoderManager::getRawTicks(), tool);
+			const int32_t deg_x100 = CoordinateSystem::ticksToDegX100(ticks);
+			CoordinateSystem::formatDeg(buf, sizeof(buf), deg_x100);
+			trim_trailing_zeros_inplace(buf);
+			lv_textarea_set_text(ta_value, buf);
+		}
+	}
+
+	lv_obj_t *btn_x = lv_btn_create(row);
+	const int main_g_btn_w = OffsetManager::getMainOffsetButtonWidth();
+	lv_obj_set_size(btn_x, main_g_btn_w, 40);
+	lv_obj_add_event_cb(btn_x, onCancel, LV_EVENT_CLICKED, nullptr);
     // Ghost style
     lv_obj_set_style_bg_opa(btn_x, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_style_border_width(btn_x, 2, LV_PART_MAIN);
-    lv_obj_set_style_border_color(btn_x, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+	lv_obj_set_style_border_width(btn_x, 1, LV_PART_MAIN);
+	lv_obj_set_style_border_color(btn_x, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
     lv_obj_set_style_text_color(btn_x, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
-    lv_obj_t *lblx = lv_label_create(btn_x);
+	lv_obj_set_style_bg_opa(btn_x, LV_OPA_20, LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_bg_color(btn_x, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_border_color(btn_x, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_text_color(btn_x, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_t *lblx = lv_label_create(btn_x);
     lv_label_set_text(lblx, "X");
     lv_obj_center(lblx);
 
     apply_modal_button_common_style(btn_x);
 
     lv_obj_t *btn_t = lv_btn_create(row);
-    lv_obj_set_size(btn_t, 52, 44);
-    lv_obj_add_event_cb(btn_t, onSetTool, LV_EVENT_CLICKED, nullptr);
+	lv_obj_set_size(btn_t, main_g_btn_w, 40);
+	lv_obj_add_event_cb(btn_t, onSetTool, LV_EVENT_CLICKED, nullptr);
     // Filled red
     lv_obj_set_style_bg_opa(btn_t, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_bg_color(btn_t, lv_palette_main(LV_PALETTE_RED), LV_PART_MAIN);
-    lv_obj_set_style_border_width(btn_t, 2, LV_PART_MAIN);
-    lv_obj_set_style_border_color(btn_t, lv_palette_main(LV_PALETTE_RED), LV_PART_MAIN);
+	lv_obj_set_style_border_width(btn_t, 1, LV_PART_MAIN);
+	lv_obj_set_style_border_color(btn_t, lv_palette_main(LV_PALETTE_RED), LV_PART_MAIN);
     lv_obj_set_style_text_color(btn_t, lv_color_white(), LV_PART_MAIN);
     lv_obj_t *lblt = lv_label_create(btn_t);
     char ttxt[8];
@@ -146,14 +401,17 @@ void ModalManager::showOffsetModal(AxisSel axis) {
 
     apply_modal_button_common_style(btn_t);
 
-    lv_obj_t *btn_g = lv_btn_create(row);
-    lv_obj_set_size(btn_g, 52, 44);
-    lv_obj_add_event_cb(btn_g, onSetGlobal, LV_EVENT_CLICKED, nullptr);
+	lv_obj_set_style_bg_color(btn_t, lv_palette_darken(LV_PALETTE_RED, 2), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_border_color(btn_t, lv_palette_darken(LV_PALETTE_RED, 2), LV_PART_MAIN | LV_STATE_PRESSED);
+
+	lv_obj_t *btn_g = lv_btn_create(row);
+	lv_obj_set_size(btn_g, main_g_btn_w, 40);
+	lv_obj_add_event_cb(btn_g, onSetGlobal, LV_EVENT_CLICKED, nullptr);
     // Filled blue
     lv_obj_set_style_bg_opa(btn_g, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_bg_color(btn_g, lv_palette_main(LV_PALETTE_BLUE), LV_PART_MAIN);
-    lv_obj_set_style_border_width(btn_g, 2, LV_PART_MAIN);
-    lv_obj_set_style_border_color(btn_g, lv_palette_main(LV_PALETTE_BLUE), LV_PART_MAIN);
+	lv_obj_set_style_border_width(btn_g, 1, LV_PART_MAIN);
+	lv_obj_set_style_border_color(btn_g, lv_palette_main(LV_PALETTE_BLUE), LV_PART_MAIN);
     lv_obj_set_style_text_color(btn_g, lv_color_white(), LV_PART_MAIN);
     lv_obj_t *lblg = lv_label_create(btn_g);
     char gtxt[8];
@@ -163,23 +421,11 @@ void ModalManager::showOffsetModal(AxisSel axis) {
 
     apply_modal_button_common_style(btn_g);
 
-    // Keyboard
-    kb = lv_keyboard_create(modal_win);
-    lv_obj_set_width(kb, LV_PCT(100));
-    lv_obj_set_height(kb, 140);
-    lv_obj_clear_flag(kb, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_scrollbar_mode(kb, LV_SCROLLBAR_MODE_OFF);
-    lv_keyboard_set_mode(kb, LV_KEYBOARD_MODE_NUMBER);
-    lv_keyboard_set_textarea(kb, ta_value);
+	lv_obj_set_style_bg_color(btn_g, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_border_color(btn_g, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_MAIN | LV_STATE_PRESSED);
 
-    // Disable pressed transforms on keyboard keys (btnmatrix items) to prevent clipping.
-    lv_obj_set_style_transform_scale_x(kb, 256, LV_PART_ITEMS | LV_STATE_PRESSED);
-    lv_obj_set_style_transform_scale_y(kb, 256, LV_PART_ITEMS | LV_STATE_PRESSED);
-    lv_obj_set_style_translate_x(kb, 0, LV_PART_ITEMS | LV_STATE_PRESSED);
-    lv_obj_set_style_translate_y(kb, 0, LV_PART_ITEMS | LV_STATE_PRESSED);
-    lv_obj_set_style_shadow_width(kb, 0, LV_PART_ITEMS | LV_STATE_PRESSED);
-    lv_obj_set_style_outline_width(kb, 0, LV_PART_ITEMS | LV_STATE_PRESSED);
-    lv_obj_set_style_outline_pad(kb, 0, LV_PART_ITEMS | LV_STATE_PRESSED);
+	// Custom numpad (3x4) + right-side CLEAR
+	kb = create_numpad(modal_win);
 }
 
 void ModalManager::showPitchModal() {
@@ -188,28 +434,30 @@ void ModalManager::showPitchModal() {
 
     modal_bg = lv_obj_create(lv_layer_top());
     lv_obj_set_size(modal_bg, LV_PCT(100), LV_PCT(100));
-    lv_obj_set_style_bg_color(modal_bg, lv_color_hex(0x000000), 0);
-    lv_obj_set_style_bg_opa(modal_bg, LV_OPA_70, 0);
-    lv_obj_add_flag(modal_bg, LV_OBJ_FLAG_CLICKABLE);
+	// Force a fully opaque blackout overlay (avoid any theme alpha/gradient).
+	lv_obj_set_style_bg_color(modal_bg, lv_color_hex(0x000000), LV_PART_MAIN);
+	lv_obj_set_style_bg_opa(modal_bg, LV_OPA_COVER, LV_PART_MAIN);
+	lv_obj_set_style_bg_image_opa(modal_bg, LV_OPA_TRANSP, LV_PART_MAIN);
+	lv_obj_add_flag(modal_bg, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_clear_flag(modal_bg, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scrollbar_mode(modal_bg, LV_SCROLLBAR_MODE_OFF);
     lv_obj_set_style_pad_all(modal_bg, 0, 0);
 
     modal_win = lv_obj_create(modal_bg);
-    lv_obj_set_size(modal_win, 460, 250);
-    lv_obj_center(modal_win);
-    lv_obj_clear_flag(modal_win, LV_OBJ_FLAG_SCROLLABLE);
+	lv_obj_set_size(modal_win, LV_PCT(100), LV_PCT(100));
+	lv_obj_clear_flag(modal_win, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scrollbar_mode(modal_win, LV_SCROLLBAR_MODE_OFF);
 
-    lv_obj_set_style_pad_all(modal_win, 10, 0);
-    lv_obj_set_style_pad_gap(modal_win, 8, 0);
-    lv_obj_set_style_bg_color(modal_win, lv_color_hex(0x101010), 0);
-    lv_obj_set_style_bg_opa(modal_win, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(modal_win, lv_palette_main(LV_PALETTE_GREY), 0);
-    lv_obj_set_style_border_width(modal_win, 2, 0);
-    lv_obj_set_style_radius(modal_win, 10, 0);
+	lv_obj_set_style_pad_all(modal_win, 12, 0);
+	lv_obj_set_style_pad_gap(modal_win, 10, 0);
+	// Force window background fully opaque too.
+	lv_obj_set_style_bg_color(modal_win, lv_color_hex(0x000000), LV_PART_MAIN);
+	lv_obj_set_style_bg_opa(modal_win, LV_OPA_COVER, LV_PART_MAIN);
+	lv_obj_set_style_bg_image_opa(modal_win, LV_OPA_TRANSP, LV_PART_MAIN);
+	lv_obj_set_style_border_width(modal_win, 0, 0);
+	lv_obj_set_style_radius(modal_win, 0, 0);
 
-    lv_obj_set_flex_flow(modal_win, LV_FLEX_FLOW_COLUMN);
+	lv_obj_set_flex_flow(modal_win, LV_FLEX_FLOW_COLUMN);
 
     // Title
     lv_obj_t *title = lv_label_create(modal_win);
@@ -219,12 +467,13 @@ void ModalManager::showPitchModal() {
         lv_label_set_text(title, CoordinateSystem::isLinearInchMode() ? "Pitch (in)" : "Pitch (mm)");
     }
     lv_obj_set_style_text_font(title, &lv_font_montserrat_24, 0);
+	lv_obj_set_style_text_color(title, modal_accent_blue_grey(), 0);
 
-    // Row: textarea + X/OK
+	// Row: textarea + X/OK
     lv_obj_t *row = lv_obj_create(modal_win);
     lv_obj_set_width(row, LV_PCT(100));
-    lv_obj_set_height(row, 44);
-    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+	lv_obj_set_height(row, 56);
+	lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scrollbar_mode(row, LV_SCROLLBAR_MODE_OFF);
     lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(row, 0, 0);
@@ -234,14 +483,25 @@ void ModalManager::showPitchModal() {
     lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     ta_value = lv_textarea_create(row);
-    lv_obj_set_height(ta_value, 44);
-    lv_obj_set_flex_grow(ta_value, 1);
+	lv_obj_set_height(ta_value, 56);
+	lv_obj_set_flex_grow(ta_value, 1);
     lv_textarea_set_one_line(ta_value, true);
     lv_textarea_set_cursor_click_pos(ta_value, true);
     lv_obj_clear_flag(ta_value, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scrollbar_mode(ta_value, LV_SCROLLBAR_MODE_OFF);
 
-    // Prefill current pitch in active unit
+	lv_obj_set_style_text_font(ta_value, &lv_font_montserrat_24, LV_PART_MAIN);
+
+	// Remove textarea fill background
+	lv_obj_set_style_bg_opa(ta_value, LV_OPA_TRANSP, LV_PART_MAIN);
+	lv_obj_set_style_bg_opa(ta_value, LV_OPA_TRANSP, LV_PART_MAIN | LV_STATE_FOCUSED);
+	// Remove textarea border
+	lv_obj_set_style_border_width(ta_value, 0, LV_PART_MAIN);
+	lv_obj_set_style_border_width(ta_value, 0, LV_PART_MAIN | LV_STATE_FOCUSED);
+	lv_obj_set_style_outline_width(ta_value, 0, LV_PART_MAIN);
+	lv_obj_set_style_outline_width(ta_value, 0, LV_PART_MAIN | LV_STATE_FOCUSED);
+
+	// Prefill current pitch in active unit
     char pbuf[32];
     if (LeadscrewManager::isPitchTpiMode()) {
         const float pitch = (float)LeadscrewManager::getPitchUm();
@@ -257,29 +517,35 @@ void ModalManager::showPitchModal() {
             snprintf(pbuf, sizeof(pbuf), "%.3f", mm);
         }
     }
-    lv_textarea_set_text(ta_value, pbuf);
+	trim_trailing_zeros_inplace(pbuf);
+	lv_textarea_set_text(ta_value, pbuf);
 
     lv_obj_t *btn_x = lv_btn_create(row);
-    lv_obj_set_size(btn_x, 44, 44);
-    lv_obj_add_event_cb(btn_x, onCancel, LV_EVENT_CLICKED, nullptr);
+	const int main_g_btn_w = OffsetManager::getMainOffsetButtonWidth();
+	lv_obj_set_size(btn_x, main_g_btn_w, 40);
+	lv_obj_add_event_cb(btn_x, onCancel, LV_EVENT_CLICKED, nullptr);
     // Ghost style
     lv_obj_set_style_bg_opa(btn_x, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_style_border_width(btn_x, 2, LV_PART_MAIN);
-    lv_obj_set_style_border_color(btn_x, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+	lv_obj_set_style_border_width(btn_x, 1, LV_PART_MAIN);
+	lv_obj_set_style_border_color(btn_x, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
     lv_obj_set_style_text_color(btn_x, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
-    lv_obj_t *lblx = lv_label_create(btn_x);
+	lv_obj_set_style_bg_opa(btn_x, LV_OPA_20, LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_bg_color(btn_x, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_border_color(btn_x, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_text_color(btn_x, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_t *lblx = lv_label_create(btn_x);
     lv_label_set_text(lblx, "X");
     lv_obj_center(lblx);
 
     apply_modal_button_common_style(btn_x);
 
     lv_obj_t *btn_ok = lv_btn_create(row);
-    lv_obj_set_size(btn_ok, 64, 44);
-    lv_obj_add_event_cb(btn_ok, onPitchOk, LV_EVENT_CLICKED, nullptr);
+	lv_obj_set_size(btn_ok, main_g_btn_w, 40);
+	lv_obj_add_event_cb(btn_ok, onPitchOk, LV_EVENT_CLICKED, nullptr);
     lv_obj_set_style_bg_opa(btn_ok, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_bg_color(btn_ok, lv_palette_main(LV_PALETTE_BLUE), LV_PART_MAIN);
-    lv_obj_set_style_border_width(btn_ok, 2, LV_PART_MAIN);
-    lv_obj_set_style_border_color(btn_ok, lv_palette_main(LV_PALETTE_BLUE), LV_PART_MAIN);
+	lv_obj_set_style_border_width(btn_ok, 1, LV_PART_MAIN);
+	lv_obj_set_style_border_color(btn_ok, lv_palette_main(LV_PALETTE_BLUE), LV_PART_MAIN);
     lv_obj_set_style_text_color(btn_ok, lv_color_white(), LV_PART_MAIN);
     lv_obj_t *lblo = lv_label_create(btn_ok);
     lv_label_set_text(lblo, "OK");
@@ -287,13 +553,10 @@ void ModalManager::showPitchModal() {
 
     apply_modal_button_common_style(btn_ok);
 
-    kb = lv_keyboard_create(modal_win);
-    lv_obj_set_width(kb, LV_PCT(100));
-    lv_obj_set_height(kb, 140);
-    lv_obj_clear_flag(kb, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_scrollbar_mode(kb, LV_SCROLLBAR_MODE_OFF);
-    lv_keyboard_set_mode(kb, LV_KEYBOARD_MODE_NUMBER);
-    lv_keyboard_set_textarea(kb, ta_value);
+	lv_obj_set_style_bg_color(btn_ok, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_border_color(btn_ok, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_MAIN | LV_STATE_PRESSED);
+
+	kb = create_numpad(modal_win);
 }
 
 void ModalManager::closeModal() {
@@ -377,6 +640,74 @@ void ModalManager::onCancel(lv_event_t *e) {
     closeModal(); 
 }
 
+void ModalManager::onNumpadClear(lv_event_t *e)
+{
+	(void)e;
+	if (!ta_value)
+		return;
+	lv_textarea_set_text(ta_value, "");
+}
+
+void ModalManager::onNumpadKey(lv_event_t *e)
+{
+	if (!ta_value)
+		return;
+
+	int key = (int)(intptr_t)lv_event_get_user_data(e);
+	if (key >= '0' && key <= '9')
+	{
+		lv_textarea_add_char(ta_value, (char)key);
+		return;
+	}
+
+	const char *cur = lv_textarea_get_text(ta_value);
+	if (!cur)
+		cur = "";
+
+	if (key == '.')
+	{
+		if (strchr(cur, '.') != nullptr)
+			return;
+
+		if (cur[0] == '\0')
+		{
+			lv_textarea_set_text(ta_value, "0.");
+			return;
+		}
+		if (strcmp(cur, "-") == 0)
+		{
+			lv_textarea_set_text(ta_value, "-0.");
+			return;
+		}
+
+		lv_textarea_add_char(ta_value, '.');
+		return;
+	}
+
+	if (key == '-')
+	{
+		char buf[64];
+		buf[0] = '\0';
+
+		if (cur[0] == '-')
+		{
+			// Remove leading '-'
+			strncpy(buf, cur + 1, sizeof(buf) - 1);
+			buf[sizeof(buf) - 1] = '\0';
+		}
+		else
+		{
+			// Add leading '-'
+			buf[0] = '-';
+			strncpy(buf + 1, cur, sizeof(buf) - 2);
+			buf[sizeof(buf) - 1] = '\0';
+		}
+
+		lv_textarea_set_text(ta_value, buf);
+		return;
+	}
+}
+
 void ModalManager::onSetTool(lv_event_t *e) { 
     (void)e; 
     applyToolOffset(); 
@@ -419,4 +750,12 @@ void ModalManager::onPitchOk(lv_event_t *e) {
     (void)e;
     applyPitch();
     closeModal();
+}
+
+void ModalManager::onNumpadBackspace(lv_event_t *e)
+{
+	(void)e;
+	if (!ta_value)
+		return;
+	lv_textarea_delete_char(ta_value);
 }

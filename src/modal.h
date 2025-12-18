@@ -14,7 +14,10 @@ public:
     static void onSetTool(lv_event_t *e);
     static void onSetGlobal(lv_event_t *e);
     static void onPitchOk(lv_event_t *e);
-    
+	static void onNumpadKey(lv_event_t *e);
+	static void onNumpadClear(lv_event_t *e);
+	static void onNumpadBackspace(lv_event_t *e);
+
 private:
     static lv_obj_t *modal_bg;
     static lv_obj_t *modal_win;

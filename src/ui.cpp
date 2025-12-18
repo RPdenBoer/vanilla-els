@@ -9,6 +9,17 @@
 
 #include <cstring>
 
+// Safely disable LVGL theme transitions (press animations) by providing
+// a valid transition descriptor with 0ms duration.
+static const lv_style_prop_t NO_TRANS_PROPS[] = {0};
+static const lv_style_transition_dsc_t NO_TRANSITION = {
+	.props = NO_TRANS_PROPS,
+	.user_data = nullptr,
+	.path_xcb = lv_anim_path_linear,
+	.time = 0,
+	.delay = 0,
+};
+
 static void apply_button_common_style(lv_obj_t *btn) {
     if (!btn) return;
 
@@ -32,11 +43,37 @@ static void apply_button_common_style(lv_obj_t *btn) {
     // Neutralize any pressed-state transform/translate from the default theme.
     lv_obj_set_style_transform_scale_x(btn, 256, LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_set_style_transform_scale_y(btn, 256, LV_PART_MAIN | LV_STATE_PRESSED);
-    lv_obj_set_style_translate_x(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED);
+	// Default theme uses transform_width/height for the "grow" press effect.
+	lv_obj_set_style_transform_width(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_transform_height(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_translate_x(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_set_style_translate_y(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED);
 
     // Some themes bump border width on press; force it stable to avoid clipping.
-    lv_obj_set_style_border_width(btn, 2, LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_border_width(btn, 1, LV_PART_MAIN | LV_STATE_PRESSED);
+
+	// Some themes define a more specific PRESSED|CHECKED style; override that too.
+	lv_obj_set_style_shadow_width(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+	lv_obj_set_style_outline_width(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+	lv_obj_set_style_outline_pad(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+	lv_obj_set_style_transform_scale_x(btn, 256, LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+	lv_obj_set_style_transform_scale_y(btn, 256, LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+	lv_obj_set_style_transform_width(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+	lv_obj_set_style_transform_height(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+	lv_obj_set_style_translate_x(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+	lv_obj_set_style_translate_y(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+	lv_obj_set_style_border_width(btn, 1, LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+
+	// Disable animations (safer than touching transition descriptors).
+	lv_obj_set_style_anim_duration(btn, 0, LV_PART_MAIN);
+	lv_obj_set_style_anim_duration(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_anim_duration(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+
+	// Also disable theme transitions explicitly.
+	lv_obj_set_style_transition(btn, &NO_TRANSITION, LV_PART_MAIN);
+	lv_obj_set_style_transition(btn, &NO_TRANSITION, LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_transition(btn, &NO_TRANSITION, LV_PART_MAIN | LV_STATE_CHECKED);
+	lv_obj_set_style_transition(btn, &NO_TRANSITION, LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
 }
 
 lv_obj_t *UIManager::lbl_x = nullptr;
@@ -132,28 +169,40 @@ void UIManager::createUI() {
     lv_obj_set_style_pad_all(offset_row, 0, 0);
     lv_obj_set_style_pad_gap(offset_row, 4, 0);
     lv_obj_set_flex_flow(offset_row, LV_FLEX_FLOW_ROW);
+	// Center buttons vertically so we can use a consistent height across T/G buttons.
+	lv_obj_set_flex_align(offset_row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    for (int i = 0; i < OFFSET_COUNT; i++) {
+	for (int i = 0; i < OFFSET_COUNT; i++) {
         lv_obj_t *btn = lv_btn_create(offset_row);
-        lv_obj_set_height(btn, 44);
-        lv_obj_set_flex_grow(btn, 1);
+		lv_obj_set_height(btn, 40);
+		lv_obj_set_flex_grow(btn, 1);
         lv_obj_clear_flag(btn, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_scrollbar_mode(btn, LV_SCROLLBAR_MODE_OFF);
         lv_obj_add_flag(btn, LV_OBJ_FLAG_CHECKABLE);
-        lv_obj_add_event_cb(btn, OffsetManager::onOffsetSelect, LV_EVENT_CLICKED, (void*)(intptr_t)i);
+		// Consistent with rest of UI: action on release.
+		lv_obj_add_event_cb(btn, OffsetManager::onOffsetSelect, LV_EVENT_CLICKED, (void*)(intptr_t)i);
 
         // Ghost by default; selected = blue
         lv_obj_set_style_bg_opa(btn, LV_OPA_TRANSP, LV_PART_MAIN);
-        lv_obj_set_style_border_width(btn, 2, LV_PART_MAIN);
-        lv_obj_set_style_border_color(btn, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+		lv_obj_set_style_border_width(btn, 1, LV_PART_MAIN);
+		lv_obj_set_style_border_color(btn, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
         lv_obj_set_style_text_color(btn, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
 
-        lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_CHECKED);
+		// Press feedback: subtle tint (no size change).
+		lv_obj_set_style_bg_opa(btn, LV_OPA_20, LV_PART_MAIN | LV_STATE_PRESSED);
+		lv_obj_set_style_bg_color(btn, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN | LV_STATE_PRESSED);
+		lv_obj_set_style_border_color(btn, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_MAIN | LV_STATE_PRESSED);
+		lv_obj_set_style_text_color(btn, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_MAIN | LV_STATE_PRESSED);
+
+		lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_CHECKED);
         lv_obj_set_style_bg_color(btn, lv_palette_main(LV_PALETTE_BLUE), LV_PART_MAIN | LV_STATE_CHECKED);
         lv_obj_set_style_border_color(btn, lv_palette_main(LV_PALETTE_BLUE), LV_PART_MAIN | LV_STATE_CHECKED);
         lv_obj_set_style_text_color(btn, lv_color_white(), LV_PART_MAIN | LV_STATE_CHECKED);
 
-        apply_button_common_style(btn);
+		lv_obj_set_style_bg_color(btn, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+		lv_obj_set_style_border_color(btn, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+
+		apply_button_common_style(btn);
 
         OffsetManager::registerButton(i, btn);
 
@@ -186,10 +235,14 @@ void UIManager::createUI() {
 
     // Ghost style
     lv_obj_set_style_bg_opa(btn_units, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_style_border_width(btn_units, 2, LV_PART_MAIN);
-    lv_obj_set_style_border_color(btn_units, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+	lv_obj_set_style_border_width(btn_units, 1, LV_PART_MAIN);
+	lv_obj_set_style_border_color(btn_units, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
     lv_obj_set_style_text_color(btn_units, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
-    apply_button_common_style(btn_units);
+	lv_obj_set_style_bg_opa(btn_units, LV_OPA_20, LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_bg_color(btn_units, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_border_color(btn_units, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_text_color(btn_units, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_MAIN | LV_STATE_PRESSED);
+	apply_button_common_style(btn_units);
 
     lv_obj_t *lbl_units = lv_label_create(btn_units);
     lbl_units_mode = lbl_units;
@@ -206,10 +259,14 @@ void UIManager::createUI() {
 
     // Ghost style
     lv_obj_set_style_bg_opa(btn_pitch_mode, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_style_border_width(btn_pitch_mode, 2, LV_PART_MAIN);
-    lv_obj_set_style_border_color(btn_pitch_mode, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+	lv_obj_set_style_border_width(btn_pitch_mode, 1, LV_PART_MAIN);
+	lv_obj_set_style_border_color(btn_pitch_mode, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
     lv_obj_set_style_text_color(btn_pitch_mode, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
-    apply_button_common_style(btn_pitch_mode);
+	lv_obj_set_style_bg_opa(btn_pitch_mode, LV_OPA_20, LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_bg_color(btn_pitch_mode, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_border_color(btn_pitch_mode, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_text_color(btn_pitch_mode, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_MAIN | LV_STATE_PRESSED);
+	apply_button_common_style(btn_pitch_mode);
 
     lv_obj_t *lblpm = lv_label_create(btn_pitch_mode);
     lbl_pitch_mode = lblpm;
@@ -225,10 +282,14 @@ void UIManager::createUI() {
 
     // Ghost style
     lv_obj_set_style_bg_opa(btn_pitch, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_style_border_width(btn_pitch, 2, LV_PART_MAIN);
-    lv_obj_set_style_border_color(btn_pitch, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+	lv_obj_set_style_border_width(btn_pitch, 1, LV_PART_MAIN);
+	lv_obj_set_style_border_color(btn_pitch, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
     lv_obj_set_style_text_color(btn_pitch, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
-    apply_button_common_style(btn_pitch);
+	lv_obj_set_style_bg_opa(btn_pitch, LV_OPA_20, LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_bg_color(btn_pitch, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_border_color(btn_pitch, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_text_color(btn_pitch, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_MAIN | LV_STATE_PRESSED);
+	apply_button_common_style(btn_pitch);
 
     lv_obj_t *lblp = lv_label_create(btn_pitch);
     lbl_pitch = lblp;
@@ -261,10 +322,14 @@ void UIManager::createUI() {
     lv_obj_add_event_cb(btn_jog_l, onJog, LV_EVENT_RELEASED, (void*)(intptr_t)-1);
     lv_obj_add_event_cb(btn_jog_l, onJog, LV_EVENT_PRESS_LOST, (void*)(intptr_t)-1);
     lv_obj_set_style_bg_opa(btn_jog_l, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_style_border_width(btn_jog_l, 2, LV_PART_MAIN);
-    lv_obj_set_style_border_color(btn_jog_l, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+	lv_obj_set_style_border_width(btn_jog_l, 1, LV_PART_MAIN);
+	lv_obj_set_style_border_color(btn_jog_l, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
     lv_obj_set_style_text_color(btn_jog_l, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
-    apply_button_common_style(btn_jog_l);
+	lv_obj_set_style_bg_opa(btn_jog_l, LV_OPA_20, LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_bg_color(btn_jog_l, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_border_color(btn_jog_l, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_text_color(btn_jog_l, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_MAIN | LV_STATE_PRESSED);
+	apply_button_common_style(btn_jog_l);
     lv_obj_t *lbll = lv_label_create(btn_jog_l);
     lv_label_set_text(lbll, "<");
     lv_obj_center(lbll);
@@ -280,16 +345,22 @@ void UIManager::createUI() {
     // Off = green, On = red
     lv_obj_set_style_bg_opa(btn_els, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_bg_color(btn_els, lv_palette_main(LV_PALETTE_GREEN), LV_PART_MAIN);
-    lv_obj_set_style_border_width(btn_els, 2, LV_PART_MAIN);
-    lv_obj_set_style_border_color(btn_els, lv_palette_main(LV_PALETTE_GREEN), LV_PART_MAIN);
+	lv_obj_set_style_border_width(btn_els, 1, LV_PART_MAIN);
+	lv_obj_set_style_border_color(btn_els, lv_palette_main(LV_PALETTE_GREEN), LV_PART_MAIN);
     lv_obj_set_style_text_color(btn_els, lv_color_white(), LV_PART_MAIN);
 
-    lv_obj_set_style_bg_opa(btn_els, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_CHECKED);
+	lv_obj_set_style_bg_color(btn_els, lv_palette_darken(LV_PALETTE_GREEN, 2), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_border_color(btn_els, lv_palette_darken(LV_PALETTE_GREEN, 2), LV_PART_MAIN | LV_STATE_PRESSED);
+
+	lv_obj_set_style_bg_opa(btn_els, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_set_style_bg_color(btn_els, lv_palette_main(LV_PALETTE_RED), LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_set_style_border_color(btn_els, lv_palette_main(LV_PALETTE_RED), LV_PART_MAIN | LV_STATE_CHECKED);
     lv_obj_set_style_text_color(btn_els, lv_color_white(), LV_PART_MAIN | LV_STATE_CHECKED);
 
-    apply_button_common_style(btn_els);
+	lv_obj_set_style_bg_color(btn_els, lv_palette_darken(LV_PALETTE_RED, 2), LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+	lv_obj_set_style_border_color(btn_els, lv_palette_darken(LV_PALETTE_RED, 2), LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+
+	apply_button_common_style(btn_els);
 
     lv_obj_t *lble = lv_label_create(btn_els);
     lbl_els = lble;
@@ -305,10 +376,14 @@ void UIManager::createUI() {
     lv_obj_add_event_cb(btn_jog_r, onJog, LV_EVENT_RELEASED, (void*)(intptr_t)1);
     lv_obj_add_event_cb(btn_jog_r, onJog, LV_EVENT_PRESS_LOST, (void*)(intptr_t)1);
     lv_obj_set_style_bg_opa(btn_jog_r, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_style_border_width(btn_jog_r, 2, LV_PART_MAIN);
-    lv_obj_set_style_border_color(btn_jog_r, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+	lv_obj_set_style_border_width(btn_jog_r, 1, LV_PART_MAIN);
+	lv_obj_set_style_border_color(btn_jog_r, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
     lv_obj_set_style_text_color(btn_jog_r, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
-    apply_button_common_style(btn_jog_r);
+	lv_obj_set_style_bg_opa(btn_jog_r, LV_OPA_20, LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_bg_color(btn_jog_r, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_border_color(btn_jog_r, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_text_color(btn_jog_r, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_MAIN | LV_STATE_PRESSED);
+	apply_button_common_style(btn_jog_r);
     lv_obj_t *lblr = lv_label_create(btn_jog_r);
     lv_label_set_text(lblr, ">");
     lv_obj_center(lblr);
@@ -341,20 +416,29 @@ void UIManager::createUI() {
         lv_obj_clear_flag(btn, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_scrollbar_mode(btn, LV_SCROLLBAR_MODE_OFF);
         lv_obj_add_flag(btn, LV_OBJ_FLAG_CHECKABLE);
-        lv_obj_add_event_cb(btn, ToolManager::onToolSelect, LV_EVENT_CLICKED, (void*)(intptr_t)i);
+		// Consistent with rest of UI: action on release.
+		lv_obj_add_event_cb(btn, ToolManager::onToolSelect, LV_EVENT_CLICKED, (void*)(intptr_t)i);
 
         // Ghost by default; selected = red
         lv_obj_set_style_bg_opa(btn, LV_OPA_TRANSP, LV_PART_MAIN);
-        lv_obj_set_style_border_width(btn, 2, LV_PART_MAIN);
-        lv_obj_set_style_border_color(btn, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+		lv_obj_set_style_border_width(btn, 1, LV_PART_MAIN);
+		lv_obj_set_style_border_color(btn, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
         lv_obj_set_style_text_color(btn, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
 
-        lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_CHECKED);
+		lv_obj_set_style_bg_opa(btn, LV_OPA_20, LV_PART_MAIN | LV_STATE_PRESSED);
+		lv_obj_set_style_bg_color(btn, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN | LV_STATE_PRESSED);
+		lv_obj_set_style_border_color(btn, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_MAIN | LV_STATE_PRESSED);
+		lv_obj_set_style_text_color(btn, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_MAIN | LV_STATE_PRESSED);
+
+		lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_CHECKED);
         lv_obj_set_style_bg_color(btn, lv_palette_main(LV_PALETTE_RED), LV_PART_MAIN | LV_STATE_CHECKED);
         lv_obj_set_style_border_color(btn, lv_palette_main(LV_PALETTE_RED), LV_PART_MAIN | LV_STATE_CHECKED);
         lv_obj_set_style_text_color(btn, lv_color_white(), LV_PART_MAIN | LV_STATE_CHECKED);
 
-        apply_button_common_style(btn);
+		lv_obj_set_style_bg_color(btn, lv_palette_darken(LV_PALETTE_RED, 2), LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+		lv_obj_set_style_border_color(btn, lv_palette_darken(LV_PALETTE_RED, 2), LV_PART_MAIN | LV_STATE_PRESSED | LV_STATE_CHECKED);
+
+		apply_button_common_style(btn);
 
         ToolManager::registerButton(i, btn);
 
@@ -380,10 +464,10 @@ lv_obj_t* UIManager::makeAxisRow(lv_obj_t *parent,
     lv_obj_set_style_pad_all(row, 2, 0);
     lv_obj_set_style_bg_color(row, lv_color_hex(0x000000), 0);
     lv_obj_set_style_bg_opa(row, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(row, 1, 0);
-    lv_obj_set_style_border_color(row, lv_color_hex(0x202020), 0);
+	// No border around axis rows (cleaner, less visual clutter)
+	lv_obj_set_style_border_width(row, 0, 0);
 
-    // 3-column grid: axis letter | unit superscript | value
+	// 3-column grid: axis letter | unit superscript | value
     // Keep the letter and superscript columns tight so they read as one unit.
     static int32_t col_dsc[] = {30, 22, LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
     static int32_t row_dsc[] = {LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
