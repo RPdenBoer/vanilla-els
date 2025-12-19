@@ -27,6 +27,66 @@ static lv_color_t modal_accent_blue_grey()
 	return lv_palette_darken(LV_PALETTE_BLUE_GREY, 4);
 }
 
+// Flag: when true, the next character input should replace all text.
+// This simulates "select all" behavior since LVGL's visual selection
+// doesn't actually replace text on input.
+static bool ta_select_all_pending = false;
+static lv_obj_t *ta_select_all_target = nullptr;
+
+// Apply visual text selection (highlighted text appearance)
+static void apply_visual_selection(lv_obj_t *ta, bool selected)
+{
+	if (!ta)
+		return;
+	lv_obj_t *label = lv_textarea_get_label(ta);
+	if (!label)
+		return;
+
+	if (selected)
+	{
+		const char *txt = lv_textarea_get_text(ta);
+		uint32_t len = txt ? (uint32_t)strlen(txt) : 0;
+		lv_label_set_text_selection_start(label, 0);
+		lv_label_set_text_selection_end(label, len);
+	}
+	else
+	{
+		lv_label_set_text_selection_start(label, LV_DRAW_LABEL_NO_TXT_SEL);
+		lv_label_set_text_selection_end(label, LV_DRAW_LABEL_NO_TXT_SEL);
+	}
+}
+
+// Mark textarea as having all text "selected" (pending replacement).
+static void mark_select_all(lv_obj_t *ta)
+{
+	if (!ta)
+		return;
+	ta_select_all_pending = true;
+	ta_select_all_target = ta;
+	lv_textarea_set_text_selection(ta, true);
+	// Visual feedback: highlight text and move cursor to end
+	apply_visual_selection(ta, true);
+	lv_textarea_set_cursor_pos(ta, LV_TEXTAREA_CURSOR_LAST);
+}
+
+// Clear the "select all" state (user tapped to edit existing value).
+static void clear_select_all()
+{
+	if (ta_select_all_pending && ta_select_all_target)
+	{
+		apply_visual_selection(ta_select_all_target, false);
+	}
+	ta_select_all_pending = false;
+	ta_select_all_target = nullptr;
+}
+
+// Textarea click handler: clears select-all state when user taps to position cursor.
+static void onTextareaClicked(lv_event_t *e)
+{
+	(void)e;
+	clear_select_all();
+}
+
 static void trim_trailing_zeros_inplace(char *s)
 {
 	if (!s || s[0] == '\0')
@@ -339,6 +399,7 @@ void ModalManager::showOffsetModal(AxisSel axis) {
     lv_textarea_set_cursor_click_pos(ta_value, true);
     lv_obj_clear_flag(ta_value, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scrollbar_mode(ta_value, LV_SCROLLBAR_MODE_OFF);
+	lv_obj_add_event_cb(ta_value, onTextareaClicked, LV_EVENT_CLICKED, nullptr);
 
 	// Match pitch-value button font size
 	lv_obj_set_style_text_font(ta_value, &lv_font_montserrat_24, LV_PART_MAIN);
@@ -351,6 +412,13 @@ void ModalManager::showOffsetModal(AxisSel axis) {
 	lv_obj_set_style_border_width(ta_value, 0, LV_PART_MAIN | LV_STATE_FOCUSED);
 	lv_obj_set_style_outline_width(ta_value, 0, LV_PART_MAIN);
 	lv_obj_set_style_outline_width(ta_value, 0, LV_PART_MAIN | LV_STATE_FOCUSED);
+
+	// Set selection highlight color to match numpad button blue-grey
+	lv_obj_t *ta_label = lv_textarea_get_label(ta_value);
+	if (ta_label)
+	{
+		lv_obj_set_style_bg_color(ta_label, modal_accent_blue_grey(), LV_PART_SELECTED);
+	}
 
 	// Start empty (no prefill)
 	// Prefill with the current displayed value (matches the DRO)
@@ -381,6 +449,9 @@ void ModalManager::showOffsetModal(AxisSel axis) {
 			lv_textarea_set_text(ta_value, buf);
 		}
 	}
+
+	// Mark text as "selected" so first keystroke replaces it
+	mark_select_all(ta_value);
 
 	const int main_g_btn_w = OffsetManager::getMainOffsetButtonWidth();
 
@@ -515,6 +586,7 @@ void ModalManager::showPitchModal() {
     lv_textarea_set_cursor_click_pos(ta_value, true);
     lv_obj_clear_flag(ta_value, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scrollbar_mode(ta_value, LV_SCROLLBAR_MODE_OFF);
+	lv_obj_add_event_cb(ta_value, onTextareaClicked, LV_EVENT_CLICKED, nullptr);
 
 	lv_obj_set_style_text_font(ta_value, &lv_font_montserrat_24, LV_PART_MAIN);
 
@@ -526,6 +598,13 @@ void ModalManager::showPitchModal() {
 	lv_obj_set_style_border_width(ta_value, 0, LV_PART_MAIN | LV_STATE_FOCUSED);
 	lv_obj_set_style_outline_width(ta_value, 0, LV_PART_MAIN);
 	lv_obj_set_style_outline_width(ta_value, 0, LV_PART_MAIN | LV_STATE_FOCUSED);
+
+	// Set selection highlight color to match numpad button blue-grey
+	lv_obj_t *ta_label = lv_textarea_get_label(ta_value);
+	if (ta_label)
+	{
+		lv_obj_set_style_bg_color(ta_label, modal_accent_blue_grey(), LV_PART_SELECTED);
+	}
 
 	// Prefill current pitch in active unit
     char pbuf[32];
@@ -545,6 +624,9 @@ void ModalManager::showPitchModal() {
     }
 	trim_trailing_zeros_inplace(pbuf);
 	lv_textarea_set_text(ta_value, pbuf);
+
+	// Mark text as "selected" so first keystroke replaces it
+	mark_select_all(ta_value);
 
 	const int main_g_btn_w = OffsetManager::getMainOffsetButtonWidth();
 
@@ -681,6 +763,14 @@ void ModalManager::onNumpadKey(lv_event_t *e)
 		return;
 
 	int key = (int)(intptr_t)lv_event_get_user_data(e);
+
+	// If select-all is pending, clear the textarea on first character input
+	if (ta_select_all_pending && key >= '0' && key <= '9')
+	{
+		lv_textarea_set_text(ta_value, "");
+		clear_select_all();
+	}
+
 	if (key >= '0' && key <= '9')
 	{
 		lv_textarea_add_char(ta_value, (char)key);
@@ -693,6 +783,14 @@ void ModalManager::onNumpadKey(lv_event_t *e)
 
 	if (key == '.')
 	{
+		// If select-all pending, start fresh with "0."
+		if (ta_select_all_pending)
+		{
+			lv_textarea_set_text(ta_value, "0.");
+			clear_select_all();
+			return;
+		}
+
 		if (strchr(cur, '.') != nullptr)
 			return;
 
@@ -713,6 +811,14 @@ void ModalManager::onNumpadKey(lv_event_t *e)
 
 	if (key == '-')
 	{
+		// If select-all pending, start fresh with just "-"
+		if (ta_select_all_pending)
+		{
+			lv_textarea_set_text(ta_value, "-");
+			clear_select_all();
+			return;
+		}
+
 		char buf[64];
 		buf[0] = '\0';
 
