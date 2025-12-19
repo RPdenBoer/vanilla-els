@@ -26,6 +26,9 @@ private:
     static lv_obj_t *lbl_z;
     static lv_obj_t *lbl_c;
 
+    static lv_obj_t *btn_jog_l;
+    static lv_obj_t *btn_jog_r;
+
     static lv_obj_t *lbl_x_unit;
     static lv_obj_t *lbl_z_unit;
     static lv_obj_t *lbl_c_unit;
@@ -39,6 +42,7 @@ private:
     static bool els_latched;
     
     static void createUI();
+    static void updateJogAvailability();
     static lv_obj_t* makeAxisRow(lv_obj_t *parent,
                                 const char *name,
                                 lv_obj_t **out_value_label,

@@ -44,13 +44,18 @@ void LeadscrewManager::init() {
         pitch_tpi_mode = false;
     }
 
-    // Intentionally do NOT configure GPIO or start the step task here.
-    // We defer all real-time step generation until the user toggles ELS ON.
+    // Initialize hardware + step task at startup (no lazy init on first enable).
     enabled = false;
     task_handle = nullptr;
     rmt_ready = false;
 
     direction_mul = 1;
+
+    // Start synchronized from current spindle position.
+    last_spindle_total = EncoderManager::getSpindleTotalCount();
+    step_accum_q16 = 0;
+
+    ensureHardware();
 }
 
 void LeadscrewManager::ensureHardware() {
@@ -116,13 +121,7 @@ void LeadscrewManager::setPitchUm(int32_t pitch_um_per_rev) {
 }
 
 void LeadscrewManager::setEnabled(bool on) {
-    // Lazy init on first enable to avoid any boot-time side effects.
-    if (on) ensureHardware();
-
     enabled = on;
-
-    // Default direction when enabling.
-    if (enabled) direction_mul = 1;
 
     // Reset synchronization so we don't do a large burst on enable.
     last_spindle_total = EncoderManager::getSpindleTotalCount();
