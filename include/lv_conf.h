@@ -14,6 +14,9 @@
 #define LV_USE_BTN   1
 #define LV_USE_LINE  1
 
+/* Enable text selection in labels/textareas */
+#define LV_LABEL_TEXT_SELECTION 1
+
 /* Fonts */
 #define LV_FONT_MONTSERRAT_14  1
 #define LV_FONT_MONTSERRAT_24  1
