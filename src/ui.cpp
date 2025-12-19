@@ -88,7 +88,20 @@ lv_obj_t *UIManager::lbl_units_mode = nullptr;
 lv_obj_t *UIManager::lbl_pitch = nullptr;
 lv_obj_t *UIManager::lbl_pitch_mode = nullptr;
 lv_obj_t *UIManager::lbl_els = nullptr;
+lv_obj_t *UIManager::btn_jog_l = nullptr;
+lv_obj_t *UIManager::btn_jog_r = nullptr;
 bool UIManager::els_latched = false;
+
+void UIManager::updateJogAvailability() {
+    if (!btn_jog_l || !btn_jog_r) return;
+    if (els_latched) {
+        lv_obj_add_state(btn_jog_l, LV_STATE_DISABLED);
+        lv_obj_add_state(btn_jog_r, LV_STATE_DISABLED);
+    } else {
+        lv_obj_clear_state(btn_jog_l, LV_STATE_DISABLED);
+        lv_obj_clear_state(btn_jog_r, LV_STATE_DISABLED);
+    }
+}
 void UIManager::init() {
     createUI();
 }
@@ -314,13 +327,14 @@ void UIManager::createUI() {
     lv_obj_set_flex_flow(els_row, LV_FLEX_FLOW_ROW);
 
     lv_obj_t *btn_jog_l = lv_btn_create(els_row);
+    UIManager::btn_jog_l = btn_jog_l;
     lv_obj_set_width(btn_jog_l, 60);
     lv_obj_set_height(btn_jog_l, LV_PCT(100));
     lv_obj_clear_flag(btn_jog_l, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scrollbar_mode(btn_jog_l, LV_SCROLLBAR_MODE_OFF);
-    lv_obj_add_event_cb(btn_jog_l, onJog, LV_EVENT_PRESSED, (void*)(intptr_t)-1);
-    lv_obj_add_event_cb(btn_jog_l, onJog, LV_EVENT_RELEASED, (void*)(intptr_t)-1);
-    lv_obj_add_event_cb(btn_jog_l, onJog, LV_EVENT_PRESS_LOST, (void*)(intptr_t)-1);
+    lv_obj_add_event_cb(btn_jog_l, onJog, LV_EVENT_PRESSED, (void*)(intptr_t)1);
+    lv_obj_add_event_cb(btn_jog_l, onJog, LV_EVENT_RELEASED, (void*)(intptr_t)1);
+    lv_obj_add_event_cb(btn_jog_l, onJog, LV_EVENT_PRESS_LOST, (void*)(intptr_t)1);
     lv_obj_set_style_bg_opa(btn_jog_l, LV_OPA_TRANSP, LV_PART_MAIN);
 	lv_obj_set_style_border_width(btn_jog_l, 1, LV_PART_MAIN);
 	lv_obj_set_style_border_color(btn_jog_l, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
@@ -368,13 +382,14 @@ void UIManager::createUI() {
     lv_obj_center(lble);
 
     lv_obj_t *btn_jog_r = lv_btn_create(els_row);
+    UIManager::btn_jog_r = btn_jog_r;
     lv_obj_set_width(btn_jog_r, 60);
     lv_obj_set_height(btn_jog_r, LV_PCT(100));
     lv_obj_clear_flag(btn_jog_r, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scrollbar_mode(btn_jog_r, LV_SCROLLBAR_MODE_OFF);
-    lv_obj_add_event_cb(btn_jog_r, onJog, LV_EVENT_PRESSED, (void*)(intptr_t)1);
-    lv_obj_add_event_cb(btn_jog_r, onJog, LV_EVENT_RELEASED, (void*)(intptr_t)1);
-    lv_obj_add_event_cb(btn_jog_r, onJog, LV_EVENT_PRESS_LOST, (void*)(intptr_t)1);
+    lv_obj_add_event_cb(btn_jog_r, onJog, LV_EVENT_PRESSED, (void*)(intptr_t)-1);
+    lv_obj_add_event_cb(btn_jog_r, onJog, LV_EVENT_RELEASED, (void*)(intptr_t)-1);
+    lv_obj_add_event_cb(btn_jog_r, onJog, LV_EVENT_PRESS_LOST, (void*)(intptr_t)-1);
     lv_obj_set_style_bg_opa(btn_jog_r, LV_OPA_TRANSP, LV_PART_MAIN);
 	lv_obj_set_style_border_width(btn_jog_r, 1, LV_PART_MAIN);
 	lv_obj_set_style_border_color(btn_jog_r, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
@@ -451,6 +466,8 @@ void UIManager::createUI() {
 
     ToolManager::setCurrentTool(0); // Set tool 1 as default
     OffsetManager::setCurrentOffset(0); // Set G1 as default
+
+    updateJogAvailability();
 }
 
 lv_obj_t* UIManager::makeAxisRow(lv_obj_t *parent,
@@ -553,6 +570,8 @@ lv_obj_t* UIManager::makeAxisRow(lv_obj_t *parent,
 void UIManager::update() {
     if (!lbl_x || !lbl_z || !lbl_c) return;
 
+    updateJogAvailability();
+
     // Keep X/Z superscripts in sync with current modes
     if (lbl_x_unit) {
         if (CoordinateSystem::isXRadiusMode()) {
@@ -646,21 +665,25 @@ void UIManager::onToggleEls(lv_event_t *e) {
     els_latched = now_on;
     LeadscrewManager::setEnabled(now_on);
     LeadscrewManager::setDirectionMul(1);
+    updateJogAvailability();
 }
 
 void UIManager::onJog(lv_event_t *e) {
     const lv_event_code_t code = lv_event_get_code(e);
     const int dir = (int)(intptr_t)lv_event_get_user_data(e);
 
+    // Jog is only available when the main ELS toggle is OFF.
+    if (els_latched) return;
+
     if (code == LV_EVENT_PRESSED) {
         // Momentary ELS: equivalent to enabling ELS while held.
         // Left = normal feed, Right = reversed feed (equivalent to negative pitch).
         LeadscrewManager::setDirectionMul((int8_t)dir);
-        if (!els_latched) LeadscrewManager::setEnabled(true);
+        LeadscrewManager::setEnabled(true);
         return;
     }
     if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
-        if (!els_latched) LeadscrewManager::setEnabled(false);
+        LeadscrewManager::setEnabled(false);
         LeadscrewManager::setDirectionMul(1);
         return;
     }
