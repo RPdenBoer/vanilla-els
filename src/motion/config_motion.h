@@ -17,7 +17,7 @@
 #define SPINDLE_MODE_STEPPER 1
 
 // >>> SELECT YOUR SPINDLE MODE HERE <<<
-#define SPINDLE_MODE SPINDLE_MODE_ENCODER
+#define SPINDLE_MODE SPINDLE_MODE_STEPPER
 
 // ============================================================================
 // Spindle Encoder Mode Configuration (SPINDLE_MODE_ENCODER)
@@ -43,9 +43,9 @@ static constexpr bool SPINDLE_INVERT_DIR = false;
 
 // MPG (Manual Pulse Generator) encoder for speed control
 // Quadrature encoder replaces potentiometer for precise RPM adjustment
-static constexpr int MPG_PINA = 34;					  // MPG encoder A (input only pin)
-static constexpr int MPG_PINB = 39;					  // MPG encoder B (input only pin, VN)
-static constexpr int32_t MPG_COUNTS_TO_MAX_RPM = 200; // 200 counts = 0-3000 RPM range
+static constexpr int MPG_PINA = 12;					  // 34;					  // MPG encoder A (input only pin)
+static constexpr int MPG_PINB = 13;					  // 39;					  // MPG encoder B (input only pin, VN)
+static constexpr int32_t MPG_COUNTS_TO_MAX_RPM = 800; // 800 counts = 0-3000 RPM range (200 PPR * 4 quadrature)
 static constexpr bool MPG_INVERT_DIR = false;
 
 // Direction switch inputs (active LOW with internal pullups)

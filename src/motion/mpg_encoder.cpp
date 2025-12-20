@@ -55,8 +55,8 @@ bool MpgEncoder::init() {
     // Configure pins as inputs
     // Note: GPIO 34, 39 are input-only and don't have internal pullups
     // External pullups required!
-    pinMode(MPG_PINA, INPUT);
-    pinMode(MPG_PINB, INPUT);
+    pinMode(MPG_PINA, INPUT_PULLUP);
+    pinMode(MPG_PINB, INPUT_PULLUP);
     
     // Read initial state
     uint8_t a = digitalRead(MPG_PINA) ? 1 : 0;

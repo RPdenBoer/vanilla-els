@@ -39,6 +39,7 @@ static void motionTask(void *param) {
 		if (mpg_mode == MpgMode::JOG_Z)
 		{
 			// Route MPG delta to Z stepper
+			// Scale: 1 MPG count = 1 Z step (direct 1:1 for fine control)
 			int32_t delta = MpgEncoder::getDelta();
 			if (delta != 0 && !ElsCore::isEnabled())
 			{
@@ -48,9 +49,12 @@ static void motionTask(void *param) {
 		else if (mpg_mode == MpgMode::JOG_C)
 		{
 			// Route MPG delta to spindle position
-			// In stepper spindle mode, we can nudge the spindle
-			// For now, just consume the delta (spindle position is set by step generation)
-			MpgEncoder::getDelta(); // Consume but don't use yet
+			// Scale: 1 MPG count = 2 spindle steps (1600 steps/rev, so 800 counts = 1 rev)
+			int32_t delta = MpgEncoder::getDelta();
+			if (delta != 0)
+			{
+				SpindleStepper::position += delta * 2;
+			}
 		}
 
 		// Update spindle stepper (read switch, generate steps)
