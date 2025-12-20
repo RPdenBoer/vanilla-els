@@ -16,6 +16,7 @@ int32_t SpiMaster::endstop_min_um = 0;
 int32_t SpiMaster::endstop_max_um = 0;
 bool SpiMaster::endstop_min_enabled = false;
 bool SpiMaster::endstop_max_enabled = false;
+MpgModeProto SpiMaster::mpg_mode = MpgModeProto::RPM_CONTROL;
 
 // Use HSPI for communication with motion board
 static SPIClass hspi(HSPI);
@@ -96,7 +97,8 @@ void SpiMaster::buildCommand(CommandPacket& cmd) {
     cmd.endstop_max_um = endstop_max_um;
     cmd.endstop_min_enabled = endstop_min_enabled ? 1 : 0;
     cmd.endstop_max_enabled = endstop_max_enabled ? 1 : 0;
-    cmd.sequence = sequence++;
+	cmd.mpg_mode = mpg_mode;
+	cmd.sequence = sequence++;
 }
 
 bool SpiMaster::poll() {
@@ -182,4 +184,20 @@ void SpiMaster::setEndstops(int32_t min_um, int32_t max_um, bool min_en, bool ma
     endstop_max_um = max_um;
     endstop_min_enabled = min_en;
     endstop_max_enabled = max_en;
+}
+
+void SpiMaster::setMpgMode(MpgModeProto mode)
+{
+#if DEBUG_SPI_LOGGING
+	if (mode != mpg_mode)
+	{
+		const char *mode_str = "RPM";
+		if (mode == MpgModeProto::JOG_Z)
+			mode_str = "JOG_Z";
+		else if (mode == MpgModeProto::JOG_C)
+			mode_str = "JOG_C";
+		Serial.printf("[UI->Motion] MPG Mode: %s\n", mode_str);
+	}
+#endif
+	mpg_mode = mode;
 }

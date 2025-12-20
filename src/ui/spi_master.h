@@ -33,7 +33,9 @@ public:
     static void setPitchUm(int32_t pitch_um);
     static void setDirectionMul(int8_t mul);
     static void setEndstops(int32_t min_um, int32_t max_um, bool min_en, bool max_en);
-    
+	static void setMpgMode(MpgModeProto mode);
+	static MpgModeProto getMpgMode() { return mpg_mode; }
+
 private:
     static StatusPacket last_status;
     static bool connected;
@@ -48,4 +50,5 @@ private:
     static int32_t endstop_max_um;
     static bool endstop_min_enabled;
     static bool endstop_max_enabled;
+	static MpgModeProto mpg_mode;
 };

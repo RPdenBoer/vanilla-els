@@ -27,7 +27,10 @@ static void apply_visual_selection(lv_obj_t *ta, bool selected) {
     if (!ta) return;
     lv_obj_t *label = lv_textarea_get_label(ta);
     if (!label) return;
-    if (selected) {
+	// Set selection background color to blue-grey (matching modal buttons)
+	lv_obj_set_style_bg_color(label, modal_accent_blue_grey(), LV_PART_SELECTED);
+	lv_obj_set_style_bg_opa(label, LV_OPA_COVER, LV_PART_SELECTED);
+	if (selected) {
         const char *txt = lv_textarea_get_text(ta);
         uint32_t len = txt ? (uint32_t)strlen(txt) : 0;
         lv_label_set_text_selection_start(label, 0);
@@ -244,8 +247,11 @@ void ModalManager::showOffsetModal(AxisSel axis) {
     lv_obj_set_style_text_font(ta_value, &lv_font_montserrat_24, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(ta_value, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(ta_value, 0, LV_PART_MAIN);
+	// Selection styling - blue-grey to match modal buttons
+	lv_obj_set_style_bg_color(ta_value, modal_accent_blue_grey(), LV_PART_SELECTED);
+	lv_obj_set_style_bg_opa(ta_value, LV_OPA_COVER, LV_PART_SELECTED);
 
-    char buf[32];
+	char buf[32];
     const int tool = ToolManager::getCurrentTool();
     if (axis == AXIS_X) {
         CoordinateSystem::formatLinear(buf, sizeof(buf), CoordinateSystem::getDisplayX(tool));
@@ -348,11 +354,15 @@ void ModalManager::showPitchModal() {
     lv_obj_set_flex_grow(ta_value, 1);
     lv_textarea_set_one_line(ta_value, true);
     lv_obj_clear_flag(ta_value, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_text_font(ta_value, &lv_font_montserrat_24, LV_PART_MAIN);
+	lv_obj_add_event_cb(ta_value, onTextareaClicked, LV_EVENT_CLICKED, nullptr);
+	lv_obj_set_style_text_font(ta_value, &lv_font_montserrat_24, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(ta_value, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(ta_value, 0, LV_PART_MAIN);
+	// Selection styling - blue-grey to match modal buttons
+	lv_obj_set_style_bg_color(ta_value, modal_accent_blue_grey(), LV_PART_SELECTED);
+	lv_obj_set_style_bg_opa(ta_value, LV_OPA_COVER, LV_PART_SELECTED);
 
-    char pbuf[32];
+	char pbuf[32];
     if (LeadscrewProxy::isPitchTpiMode()) {
         float tpi = 25400.0f / fabsf((float)LeadscrewProxy::getPitchUm());
         snprintf(pbuf, sizeof(pbuf), "%.2f", tpi);
@@ -438,11 +448,15 @@ void ModalManager::showEndstopModal(bool is_max) {
     lv_obj_set_flex_grow(ta_value, 1);
     lv_textarea_set_one_line(ta_value, true);
     lv_obj_clear_flag(ta_value, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_text_font(ta_value, &lv_font_montserrat_24, LV_PART_MAIN);
+	lv_obj_add_event_cb(ta_value, onTextareaClicked, LV_EVENT_CLICKED, nullptr);
+	lv_obj_set_style_text_font(ta_value, &lv_font_montserrat_24, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(ta_value, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(ta_value, 0, LV_PART_MAIN);
+	// Selection styling - blue-grey to match modal buttons
+	lv_obj_set_style_bg_color(ta_value, modal_accent_blue_grey(), LV_PART_SELECTED);
+	lv_obj_set_style_bg_opa(ta_value, LV_OPA_COVER, LV_PART_SELECTED);
 
-    const int tool = ToolManager::getCurrentTool();
+	const int tool = ToolManager::getCurrentTool();
     char pbuf[32];
     int32_t display_um = EndstopProxy::areEndstopsSet()
         ? (is_max ? EndstopProxy::getMaxDisplayUm(tool) : EndstopProxy::getMinDisplayUm(tool))

@@ -2,12 +2,16 @@
 #include "config_motion.h"
 #include <Arduino.h>
 #include "driver/gpio.h"
+
+#if SPINDLE_MODE == SPINDLE_MODE_ENCODER
 #include "driver/pulse_cnt.h"
+#endif
 
 // Static member initialization
 EncoderMotion::QuadAxis EncoderMotion::x_axis = {0, 0, 0, 0, 1};
 EncoderMotion::QuadAxis EncoderMotion::z_axis = {0, 0, 0, 0, 1};
 
+#if SPINDLE_MODE == SPINDLE_MODE_ENCODER
 pcnt_unit_handle_t pcnt_unit = nullptr;
 pcnt_channel_handle_t pcnt_chan_a = nullptr;
 pcnt_channel_handle_t pcnt_chan_b = nullptr;
@@ -15,6 +19,7 @@ volatile int32_t EncoderMotion::c_pcnt_accum = 0;
 
 int16_t EncoderMotion::rpm_signed = 0;
 int16_t EncoderMotion::rpm_abs = 0;
+#endif
 
 // ============================================================================
 // Quadrature decoder for X/Z linear encoders (GPIO ISR based)
@@ -58,6 +63,7 @@ void EncoderMotion::initLinearAxis(QuadAxis &axis) {
     attachInterruptArg((int)axis.pin_b, quadIsr, (void *)&axis, CHANGE);
 }
 
+#if SPINDLE_MODE == SPINDLE_MODE_ENCODER
 // ============================================================================
 // PCNT overflow callback (extends 16-bit counter to 32-bit)
 // ============================================================================
@@ -70,6 +76,7 @@ static bool IRAM_ATTR pcnt_on_reach(pcnt_unit_handle_t unit,
     pcnt_unit_clear_count(unit);
     return true;
 }
+#endif
 
 // ============================================================================
 // Initialization
@@ -90,7 +97,8 @@ bool EncoderMotion::init() {
     z_axis.dir = Z_INVERT_DIR ? -1 : 1;
     initLinearAxis(z_axis);
 
-    // Initialize spindle encoder using PCNT hardware
+#if SPINDLE_MODE == SPINDLE_MODE_ENCODER
+	// Initialize spindle encoder using PCNT hardware
     pinMode(C_PINA, INPUT_PULLUP);
     pinMode(C_PINB, INPUT_PULLUP);
 
@@ -170,8 +178,9 @@ bool EncoderMotion::init() {
     c_pcnt_accum = 0;
     err = pcnt_unit_start(pcnt_unit);
     if (err != ESP_OK) return false;
+#endif // SPINDLE_MODE_ENCODER
 
-    return true;
+	return true;
 }
 
 // ============================================================================
@@ -179,8 +188,9 @@ bool EncoderMotion::init() {
 // ============================================================================
 
 void EncoderMotion::update() {
-    // RPM calculation (run at lower rate)
-    static uint32_t last_ms = 0;
+#if SPINDLE_MODE == SPINDLE_MODE_ENCODER
+	// RPM calculation (run at lower rate) - only for encoder mode
+	static uint32_t last_ms = 0;
     static int32_t last_total = 0;
 
     const uint32_t now = millis();
@@ -201,6 +211,8 @@ void EncoderMotion::update() {
 
     rpm_signed = (int16_t)lroundf(rpmf);
     rpm_abs = (int16_t)lroundf(fabsf(rpmf));
+#endif
+	// In stepper mode, RPM comes from SpindleStepper class
 }
 
 // ============================================================================
@@ -223,6 +235,7 @@ int32_t EncoderMotion::getZCount() {
     return v;
 }
 
+#if SPINDLE_MODE == SPINDLE_MODE_ENCODER
 int32_t EncoderMotion::getTotalSpindleCount() {
     int count = 0;
     pcnt_unit_get_count(pcnt_unit, &count);
@@ -232,3 +245,4 @@ int32_t EncoderMotion::getTotalSpindleCount() {
 int32_t EncoderMotion::getSpindleCount() {
     return getTotalSpindleCount();
 }
+#endif

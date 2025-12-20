@@ -4,6 +4,22 @@
 #include "stepper.h"
 #include <Arduino.h>
 
+#if SPINDLE_MODE == SPINDLE_MODE_STEPPER
+#include "spindle_stepper.h"
+#endif
+
+// ============================================================================
+// Spindle position abstraction - works for both encoder and stepper modes
+// ============================================================================
+static inline int32_t getSpindlePosition()
+{
+#if SPINDLE_MODE == SPINDLE_MODE_ENCODER
+	return EncoderMotion::getSpindleCount();
+#else
+	return SpindleStepper::getPosition();
+#endif
+}
+
 // Static member initialization
 bool ElsCore::enabled = false;
 bool ElsCore::fault = false;
@@ -27,15 +43,15 @@ void ElsCore::init() {
     enabled = false;
     fault = false;
     endstop_triggered = false;
-    last_spindle_count = EncoderMotion::getSpindleCount();
-    step_accumulator = 0;
+	last_spindle_count = getSpindlePosition();
+	step_accumulator = 0;
 }
 
 void ElsCore::setEnabled(bool on) {
     if (on && !enabled) {
         // Enabling: sync to current spindle position
-        last_spindle_count = EncoderMotion::getSpindleCount();
-        step_accumulator = 0;
+		last_spindle_count = getSpindlePosition();
+		step_accumulator = 0;
         fault = false;
         endstop_triggered = false;
     }
@@ -69,10 +85,10 @@ bool ElsCore::checkEndstops(int32_t z_um) {
 
 void ElsCore::update() {
     if (!enabled) return;
-    
-    // Get current spindle position
-    int32_t spindle_count = EncoderMotion::getSpindleCount();
-    int32_t spindle_delta = spindle_count - last_spindle_count;
+
+	// Get current spindle position (from encoder or stepper, depending on mode)
+	int32_t spindle_count = getSpindlePosition();
+	int32_t spindle_delta = spindle_count - last_spindle_count;
     last_spindle_count = spindle_count;
     
     if (spindle_delta == 0) return;
