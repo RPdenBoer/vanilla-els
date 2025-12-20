@@ -1,5 +1,5 @@
-#include "touch.h"
-#include "config.h"
+#include "touch_ui.h"
+#include "config_ui.h"
 
 TouchLib TouchManager::touch(Wire, TOUCH_SDA, TOUCH_SCL, TOUCH_ADDR);
 

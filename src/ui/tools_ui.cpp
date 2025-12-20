@@ -1,5 +1,5 @@
-#include "tools.h"
-#include "config.h"
+#include "tools_ui.h"
+#include "shared/config_shared.h"
 
 int ToolManager::g_tool_index = 0;
 lv_obj_t *ToolManager::tool_btns[TOOL_COUNT] = {0};

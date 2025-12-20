@@ -1,6 +1,5 @@
-#include "coordinates.h"
-
-#include "offsets.h"
+#include "coordinates_ui.h"
+#include "offsets_ui.h"
 
 #include <Arduino.h>
 #include <cstring>
@@ -8,6 +7,7 @@
 // Static member definitions
 int32_t CoordinateSystem::x_raw_um = 0;
 int32_t CoordinateSystem::z_raw_um = 0;
+int32_t CoordinateSystem::c_raw_ticks = 0;
 
 int32_t CoordinateSystem::x_global_um[OFFSET_COUNT] = {0};
 int32_t CoordinateSystem::z_global_um[OFFSET_COUNT] = {0};
@@ -61,10 +61,10 @@ int32_t CoordinateSystem::getDisplayZ(int tool_index) {
     return zMachineToUserUm(machine_um);
 }
 
-int32_t CoordinateSystem::getDisplayC(int32_t c_raw_ticks, int tool_index) {
+int32_t CoordinateSystem::getDisplayC(int32_t c_ticks, int tool_index) {
     int off = OffsetManager::getCurrentOffset();
     if (off < 0 || off >= OFFSET_COUNT) off = 0;
-    int32_t raw = wrap01599(c_raw_ticks);
+    int32_t raw = wrap01599(c_ticks);
     return wrap01599(raw - c_global_ticks[off] - c_tool_ticks[tool_index]);
 }
 
@@ -72,16 +72,15 @@ void CoordinateSystem::formatMm(char *out, size_t n, int32_t um) {
     int32_t sign = (um < 0) ? -1 : 1;
     int32_t a = (um < 0) ? -um : um;
     int32_t mm_i = (a / 1000);
-	int32_t mm_f = ((a % 1000) + 5) / 10; // round to 2 decimals
-	if (mm_f >= 100)
-	{
-		mm_i++;
-		mm_f = 0;
-	} // handle rounding overflow
-	if (sign < 0)
-		snprintf(out, n, "-%ld.%02ld", (long)mm_i, (long)mm_f);
-	else
-		snprintf(out, n, "%ld.%02ld", (long)mm_i, (long)mm_f);
+    int32_t mm_f = ((a % 1000) + 5) / 10; // round to 2 decimals
+    if (mm_f >= 100) {
+        mm_i++;
+        mm_f = 0;
+    } // handle rounding overflow
+    if (sign < 0)
+        snprintf(out, n, "-%ld.%02ld", (long)mm_i, (long)mm_f);
+    else
+        snprintf(out, n, "%ld.%02ld", (long)mm_i, (long)mm_f);
 }
 
 void CoordinateSystem::formatDeg(char *out, size_t n, int32_t deg_x100) {
@@ -129,8 +128,8 @@ void CoordinateSystem::formatLinear(char *out, size_t n, int32_t um) {
 
     // Inches: 1 inch = 25.4mm = 25400um
     float inches = (float)um / 25400.0f;
-	// 3 decimals is a reasonable DRO-style resolution for inches
-	snprintf(out, n, "%.3f", inches);
+    // 3 decimals is a reasonable DRO-style resolution for inches
+    snprintf(out, n, "%.3f", inches);
 }
 
 bool CoordinateSystem::parseLinearToUm(const char *s, int32_t *out_um) {

@@ -1,8 +1,7 @@
 #pragma once
 
 #include <lvgl.h>
-
-#include "config.h"
+#include "shared/config_shared.h"
 
 class ToolManager {
 public:
