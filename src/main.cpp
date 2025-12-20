@@ -11,6 +11,7 @@
 #include "touch.h"
 #include "ui.h"
 #include "leadscrew.h"
+#include "endstops.h"
 
 /* =========================
    LVGL timing
@@ -69,6 +70,7 @@ void setup()
 
   ToolManager::init();
   OffsetManager::init();
+  EndstopManager::init();
   UIManager::init();
   Serial.println("ui init");
 

@@ -5,6 +5,8 @@
 #include "encoder.h"
 #include "config.h"
 #include "leadscrew.h"
+#include "endstops.h"
+#include "ui.h"
 
 #include <cstring>
 
@@ -317,13 +319,16 @@ lv_obj_t *ModalManager::ta_value = nullptr;
 lv_obj_t *ModalManager::kb = nullptr;
 AxisSel ModalManager::active_axis = AXIS_X;
 bool ModalManager::pitch_modal = false;
+bool ModalManager::endstop_modal = false;
+bool ModalManager::endstop_is_max = false;
 
 void ModalManager::showOffsetModal(AxisSel axis) {
     if (modal_bg) return;
     active_axis = axis;
     pitch_modal = false;
+	endstop_modal = false;
 
-    modal_bg = lv_obj_create(lv_layer_top());
+	modal_bg = lv_obj_create(lv_layer_top());
     lv_obj_set_size(modal_bg, LV_PCT(100), LV_PCT(100));
 	// Force a fully opaque blackout overlay (avoid any theme alpha/gradient).
 	lv_obj_set_style_bg_color(modal_bg, lv_color_hex(0x000000), LV_PART_MAIN);
@@ -668,6 +673,173 @@ void ModalManager::showPitchModal() {
 	kb = create_numpad(modal_win);
 }
 
+void ModalManager::showEndstopModal(bool is_max)
+{
+	if (modal_bg)
+		return;
+	pitch_modal = false;
+	endstop_modal = true;
+	endstop_is_max = is_max;
+
+	modal_bg = lv_obj_create(lv_layer_top());
+	lv_obj_set_size(modal_bg, LV_PCT(100), LV_PCT(100));
+	// Force a fully opaque blackout overlay
+	lv_obj_set_style_bg_color(modal_bg, lv_color_hex(0x000000), LV_PART_MAIN);
+	lv_obj_set_style_bg_opa(modal_bg, LV_OPA_COVER, LV_PART_MAIN);
+	lv_obj_set_style_bg_image_opa(modal_bg, LV_OPA_TRANSP, LV_PART_MAIN);
+	lv_obj_set_style_border_width(modal_bg, 0, LV_PART_MAIN);
+	lv_obj_set_style_outline_width(modal_bg, 0, LV_PART_MAIN);
+	lv_obj_set_style_shadow_width(modal_bg, 0, LV_PART_MAIN);
+	lv_obj_add_flag(modal_bg, LV_OBJ_FLAG_CLICKABLE);
+	lv_obj_clear_flag(modal_bg, LV_OBJ_FLAG_SCROLLABLE);
+	lv_obj_set_scrollbar_mode(modal_bg, LV_SCROLLBAR_MODE_OFF);
+	lv_obj_set_style_pad_all(modal_bg, 0, 0);
+
+	modal_win = lv_obj_create(modal_bg);
+	lv_obj_set_size(modal_win, LV_PCT(100), LV_PCT(100));
+	lv_obj_clear_flag(modal_win, LV_OBJ_FLAG_SCROLLABLE);
+	lv_obj_set_scrollbar_mode(modal_win, LV_SCROLLBAR_MODE_OFF);
+
+	lv_obj_set_style_pad_all(modal_win, 6, 0);
+	lv_obj_set_style_pad_gap(modal_win, 6, 0);
+	lv_obj_set_style_bg_color(modal_win, lv_color_hex(0x000000), LV_PART_MAIN);
+	lv_obj_set_style_bg_opa(modal_win, LV_OPA_COVER, LV_PART_MAIN);
+	lv_obj_set_style_bg_image_opa(modal_win, LV_OPA_TRANSP, LV_PART_MAIN);
+	lv_obj_set_style_border_width(modal_win, 0, LV_PART_MAIN);
+	lv_obj_set_style_outline_width(modal_win, 0, LV_PART_MAIN);
+	lv_obj_set_style_shadow_width(modal_win, 0, LV_PART_MAIN);
+	lv_obj_set_style_radius(modal_win, 0, LV_PART_MAIN);
+
+	lv_obj_set_flex_flow(modal_win, LV_FLEX_FLOW_COLUMN);
+
+	// Title
+	lv_obj_t *title = lv_label_create(modal_win);
+	if (is_max)
+	{
+		lv_label_set_text(title, CoordinateSystem::isLinearInchMode() ? "Z Max ] (in)" : "Z Max ] (mm)");
+	}
+	else
+	{
+		lv_label_set_text(title, CoordinateSystem::isLinearInchMode() ? "Z Min [ (in)" : "Z Min [ (mm)");
+	}
+	lv_obj_set_style_text_font(title, &lv_font_montserrat_24, 0);
+	lv_obj_set_style_text_color(title, modal_accent_blue_grey(), 0);
+
+	// Row: textarea + OK/CLEAR/X buttons
+	lv_obj_t *row = lv_obj_create(modal_win);
+	lv_obj_set_width(row, LV_PCT(100));
+	lv_obj_set_height(row, 56);
+	lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+	lv_obj_set_scrollbar_mode(row, LV_SCROLLBAR_MODE_OFF);
+	lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+	lv_obj_set_style_border_width(row, 0, 0);
+	lv_obj_set_style_pad_all(row, 0, 0);
+	lv_obj_set_style_pad_gap(row, 8, 0);
+	lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+	lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+	ta_value = lv_textarea_create(row);
+	lv_obj_set_height(ta_value, 56);
+	lv_obj_set_flex_grow(ta_value, 1);
+	lv_textarea_set_one_line(ta_value, true);
+	lv_textarea_set_cursor_click_pos(ta_value, true);
+	lv_obj_clear_flag(ta_value, LV_OBJ_FLAG_SCROLLABLE);
+	lv_obj_set_scrollbar_mode(ta_value, LV_SCROLLBAR_MODE_OFF);
+	lv_obj_add_event_cb(ta_value, onTextareaClicked, LV_EVENT_CLICKED, nullptr);
+
+	lv_obj_set_style_text_font(ta_value, &lv_font_montserrat_24, LV_PART_MAIN);
+
+	// Remove textarea fill background
+	lv_obj_set_style_bg_opa(ta_value, LV_OPA_TRANSP, LV_PART_MAIN);
+	lv_obj_set_style_bg_opa(ta_value, LV_OPA_TRANSP, LV_PART_MAIN | LV_STATE_FOCUSED);
+	// Remove textarea border
+	lv_obj_set_style_border_width(ta_value, 0, LV_PART_MAIN);
+	lv_obj_set_style_border_width(ta_value, 0, LV_PART_MAIN | LV_STATE_FOCUSED);
+	lv_obj_set_style_outline_width(ta_value, 0, LV_PART_MAIN);
+	lv_obj_set_style_outline_width(ta_value, 0, LV_PART_MAIN | LV_STATE_FOCUSED);
+
+	// Set selection highlight color
+	lv_obj_t *ta_label = lv_textarea_get_label(ta_value);
+	if (ta_label)
+	{
+		lv_obj_set_style_bg_color(ta_label, modal_accent_blue_grey(), LV_PART_SELECTED);
+	}
+
+	// Prefill with current endstop value if set, otherwise current Z position
+	const int tool = ToolManager::getCurrentTool();
+	char pbuf[32];
+	int32_t display_um;
+	if (EndstopManager::areEndstopsSet())
+	{
+		display_um = is_max ? EndstopManager::getMaxDisplayUm(tool) : EndstopManager::getMinDisplayUm(tool);
+	}
+	else
+	{
+		// Not set yet - prefill with current Z display value
+		display_um = CoordinateSystem::getDisplayZ(tool);
+	}
+	CoordinateSystem::formatLinear(pbuf, sizeof(pbuf), display_um);
+	trim_trailing_zeros_inplace(pbuf);
+	lv_textarea_set_text(ta_value, pbuf);
+
+	// Mark text as "selected" so first keystroke replaces it
+	mark_select_all(ta_value);
+
+	const int btn_w = 50;
+
+	// OK button (sets the endstop)
+	lv_obj_t *btn_ok = lv_btn_create(row);
+	lv_obj_set_size(btn_ok, btn_w, 40);
+	lv_obj_add_event_cb(btn_ok, onEndstopOk, LV_EVENT_CLICKED, nullptr);
+	lv_obj_set_style_bg_opa(btn_ok, LV_OPA_COVER, LV_PART_MAIN);
+	lv_obj_set_style_bg_color(btn_ok, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_MAIN);
+	lv_obj_set_style_border_width(btn_ok, 1, LV_PART_MAIN);
+	lv_obj_set_style_border_color(btn_ok, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_MAIN);
+	lv_obj_set_style_text_color(btn_ok, lv_color_white(), LV_PART_MAIN);
+	lv_obj_t *lblo = lv_label_create(btn_ok);
+	lv_label_set_text(lblo, "OK");
+	lv_obj_center(lblo);
+	apply_modal_button_common_style(btn_ok);
+	lv_obj_set_style_bg_color(btn_ok, lv_palette_darken(LV_PALETTE_BLUE, 3), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_border_color(btn_ok, lv_palette_darken(LV_PALETTE_BLUE, 3), LV_PART_MAIN | LV_STATE_PRESSED);
+
+	// CLR button (clears both endstops)
+	lv_obj_t *btn_clr = lv_btn_create(row);
+	lv_obj_set_size(btn_clr, btn_w, 40);
+	lv_obj_add_event_cb(btn_clr, onEndstopClear, LV_EVENT_CLICKED, nullptr);
+	lv_obj_set_style_bg_opa(btn_clr, LV_OPA_COVER, LV_PART_MAIN);
+	lv_obj_set_style_bg_color(btn_clr, lv_palette_darken(LV_PALETTE_ORANGE, 2), LV_PART_MAIN);
+	lv_obj_set_style_border_width(btn_clr, 1, LV_PART_MAIN);
+	lv_obj_set_style_border_color(btn_clr, lv_palette_darken(LV_PALETTE_ORANGE, 2), LV_PART_MAIN);
+	lv_obj_set_style_text_color(btn_clr, lv_color_white(), LV_PART_MAIN);
+	lv_obj_t *lblclr = lv_label_create(btn_clr);
+	lv_label_set_text(lblclr, "CLR");
+	lv_obj_center(lblclr);
+	apply_modal_button_common_style(btn_clr);
+	lv_obj_set_style_bg_color(btn_clr, lv_palette_darken(LV_PALETTE_ORANGE, 3), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_border_color(btn_clr, lv_palette_darken(LV_PALETTE_ORANGE, 3), LV_PART_MAIN | LV_STATE_PRESSED);
+
+	// X button (cancel)
+	lv_obj_t *btn_x = lv_btn_create(row);
+	lv_obj_set_size(btn_x, btn_w, 40);
+	lv_obj_add_event_cb(btn_x, onCancel, LV_EVENT_CLICKED, nullptr);
+	// Ghost style
+	lv_obj_set_style_bg_opa(btn_x, LV_OPA_TRANSP, LV_PART_MAIN);
+	lv_obj_set_style_border_width(btn_x, 1, LV_PART_MAIN);
+	lv_obj_set_style_border_color(btn_x, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+	lv_obj_set_style_text_color(btn_x, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+	lv_obj_set_style_bg_opa(btn_x, LV_OPA_20, LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_bg_color(btn_x, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_border_color(btn_x, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_set_style_text_color(btn_x, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_MAIN | LV_STATE_PRESSED);
+	lv_obj_t *lblx = lv_label_create(btn_x);
+	lv_label_set_text(lblx, "X");
+	lv_obj_center(lblx);
+	apply_modal_button_common_style(btn_x);
+
+	kb = create_numpad(modal_win);
+}
+
 void ModalManager::closeModal() {
     if (modal_bg) {
         lv_obj_del(modal_bg);
@@ -883,6 +1055,54 @@ void ModalManager::onPitchOk(lv_event_t *e) {
     (void)e;
     applyPitch();
     closeModal();
+}
+
+void ModalManager::applyEndstop()
+{
+	if (!ta_value)
+		return;
+	const char *txt = lv_textarea_get_text(ta_value);
+	const int tool = ToolManager::getCurrentTool();
+
+	int32_t target_um = 0;
+	if (!CoordinateSystem::parseLinearToUm(txt, &target_um))
+	{
+		// Invalid input - use current position
+		target_um = CoordinateSystem::getDisplayZ(tool);
+	}
+
+	if (endstop_is_max)
+	{
+		EndstopManager::setMaxFromDisplayUm(target_um, tool);
+	}
+	else
+	{
+		EndstopManager::setMinFromDisplayUm(target_um, tool);
+	}
+	UIManager::updateEndstopButtonStates();
+}
+
+void ModalManager::onEndstopOk(lv_event_t *e)
+{
+	(void)e;
+	applyEndstop();
+	closeModal();
+}
+
+void ModalManager::onEndstopClear(lv_event_t *e)
+{
+	(void)e;
+	// Clear only the relevant endstop
+	if (endstop_is_max)
+	{
+		EndstopManager::clearMax();
+	}
+	else
+	{
+		EndstopManager::clearMin();
+	}
+	UIManager::updateEndstopButtonStates();
+	closeModal();
 }
 
 void ModalManager::onNumpadBackspace(lv_event_t *e)

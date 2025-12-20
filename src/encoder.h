@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include "driver/pulse_cnt.h"
+#include "config.h"
 
 // X/Z use GPIO interrupts (no PCNT). C uses ESP-IDF PCNT.
 
@@ -13,9 +14,15 @@ public:
     // Full-resolution spindle count (extended beyond PCNT limits)
     static int32_t getSpindleTotalCount();
     static int32_t getRpm() { return rpm_raw; }
-    static bool shouldShowRpm() { return c_show_rpm; }
+	static int32_t getRpmSigned() { return rpm_signed; } // Includes direction
+	static bool shouldShowRpm() { return c_show_rpm; }
 
-    static int32_t getXCount();
+	// Manual RPM/deg toggle (only effective when below auto-threshold)
+	static bool isManualRpmMode() { return c_manual_rpm_mode; }
+	static void toggleManualRpmMode();
+	static bool canToggleManualMode() { return rpm_raw <= RPM_SHOW_RPM_OFF; }
+
+	static int32_t getXCount();
     static int32_t getZCount();
     
 private:
@@ -26,9 +33,11 @@ private:
     
     static int32_t c_raw_ticks;
     static int32_t rpm_raw;
-    static bool c_show_rpm;
+	static int32_t rpm_signed; // RPM with direction sign
+	static bool c_show_rpm;
+	static bool c_manual_rpm_mode; // User preference when below auto-threshold
 
-    struct QuadAxis {
+	struct QuadAxis {
         uint8_t pin_a;
         uint8_t pin_b;
         volatile int32_t count;

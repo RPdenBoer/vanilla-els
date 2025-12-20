@@ -11,7 +11,9 @@ volatile int32_t EncoderManager::c_pcnt_accum = 0;
 
 int32_t EncoderManager::c_raw_ticks = 0;
 int32_t EncoderManager::rpm_raw = 0;
+int32_t EncoderManager::rpm_signed = 0;
 bool EncoderManager::c_show_rpm = false;
+bool EncoderManager::c_manual_rpm_mode = false;
 
 EncoderManager::QuadAxis EncoderManager::x_axis = {0, 0, 0, 0, 1};
 EncoderManager::QuadAxis EncoderManager::z_axis = {0, 0, 0, 0, 1};
@@ -223,16 +225,37 @@ void EncoderManager::update() {
     float dt_s = (float)dt_ms / 1000.0f;
     float revs = (float)delta / (float)C_COUNTS_PER_REV;
     float rps  = revs / dt_s;
-    float rpmf = fabsf(rps * 60.0f);
+	float rpmf = rps * 60.0f;
 
-    rpm_raw = (int32_t)lroundf(rpmf);
+	rpm_signed = (int32_t)lroundf(rpmf);	 // Keep sign for direction
+	rpm_raw = (int32_t)lroundf(fabsf(rpmf)); // Absolute value for threshold checks
 
-    // Mode switching with hysteresis
-    if (!c_show_rpm && rpm_raw >= RPM_SHOW_RPM_ON) {
-        c_show_rpm = true;
-    } else if (c_show_rpm && rpm_raw <= RPM_SHOW_RPM_OFF) {
-        c_show_rpm = false;
-    }
+	// Mode switching with hysteresis
+	// Above high threshold: always show RPM (auto-mode takes over)
+	// Below low threshold: respect manual preference
+	if (rpm_raw >= RPM_SHOW_RPM_ON)
+	{
+		c_show_rpm = true;
+	}
+	else if (rpm_raw <= RPM_SHOW_RPM_OFF)
+	{
+		// Below auto-threshold: use manual preference
+		c_show_rpm = c_manual_rpm_mode;
+	}
+}
+
+void EncoderManager::toggleManualRpmMode()
+{
+	// Only toggle if we're below the auto-threshold (i.e. manual mode is in effect)
+	if (!c_show_rpm || rpm_raw <= RPM_SHOW_RPM_OFF)
+	{
+		c_manual_rpm_mode = !c_manual_rpm_mode;
+		// Immediately apply the change when below threshold
+		if (rpm_raw <= RPM_SHOW_RPM_OFF)
+		{
+			c_show_rpm = c_manual_rpm_mode;
+		}
+	}
 }
 
 int32_t EncoderManager::getSpindleTotalCount() {

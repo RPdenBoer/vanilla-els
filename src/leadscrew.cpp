@@ -10,6 +10,7 @@
 #include "config.h"
 #include "coordinates.h"
 #include "encoder.h"
+#include "endstops.h"
 
 #include "driver/gpio.h"
 
@@ -23,6 +24,7 @@ bool LeadscrewManager::enabled = false;
 bool LeadscrewManager::pitch_tpi_mode = false;
 int32_t LeadscrewManager::pitch_um = 1000; // default: 1.000mm pitch
 volatile int8_t LeadscrewManager::direction_mul = 1;
+volatile bool LeadscrewManager::bounds_exceeded = false;
 int32_t LeadscrewManager::last_spindle_total = 0;
 int64_t LeadscrewManager::step_accum_q16 = 0;
 void *LeadscrewManager::task_handle = nullptr;
@@ -120,6 +122,17 @@ void LeadscrewManager::setPitchUm(int32_t pitch_um_per_rev) {
     pitch_um = pitch_um_per_rev;
 }
 
+void LeadscrewManager::checkBoundsAndDisable()
+{
+	// Check if Z is within configured endstop bounds.
+	// If out of bounds, disable ELS and set the bounds_exceeded flag.
+	if (enabled && !EndstopManager::isZInBounds(CoordinateSystem::z_raw_um))
+	{
+		bounds_exceeded = true;
+		setEnabled(false);
+	}
+}
+
 void LeadscrewManager::setEnabled(bool on) {
     enabled = on;
 
@@ -172,7 +185,24 @@ void LeadscrewManager::stepTask(void *arg) {
     (void)arg;
     for (;;) {
         if (enabled) {
-            updateOnce();
+			// Check Z bounds before processing - disable immediately if out of range.
+			// This check happens at 1kHz, providing fast reaction time.
+			if (!EndstopManager::isZInBounds(CoordinateSystem::z_raw_um))
+			{
+				bounds_exceeded = true;
+				enabled = false;
+				// Disable driver immediately
+				if (ELS_EN_PIN >= 0)
+				{
+					if (ELS_EN_ACTIVE_LOW)
+						gpio_set_level((gpio_num_t)ELS_EN_PIN, 1);
+					else
+						gpio_set_level((gpio_num_t)ELS_EN_PIN, 0);
+				}
+				vTaskDelay(pdMS_TO_TICKS(10));
+				continue;
+			}
+			updateOnce();
             // Fast loop; 1ms cadence keeps phase tight
             vTaskDelay(pdMS_TO_TICKS(1));
         } else {

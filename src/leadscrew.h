@@ -11,7 +11,10 @@ public:
     static void setEnabled(bool on);
     static void toggleEnabled() { setEnabled(!enabled); }
 
-    // Pitch input/display mode is independent of DRO mm/in.
+	// Check bounds and disable if out of range (called from step task)
+	static void checkBoundsAndDisable();
+
+	// Pitch input/display mode is independent of DRO mm/in.
     // When true, pitch is shown/entered as TPI. When false, as mm per rev.
     static bool isPitchTpiMode() { return pitch_tpi_mode; }
     static void setPitchTpiMode(bool on) { pitch_tpi_mode = on; }
@@ -29,6 +32,10 @@ public:
     // UI helpers
     static void formatPitchLabel(char *out, size_t n);
 
+	// Flag set when bounds are exceeded (cleared when re-enabled)
+	static bool wasBoundsExceeded() { return bounds_exceeded; }
+	static void clearBoundsExceeded() { bounds_exceeded = false; }
+
 private:
     static void stepTask(void *arg);
     static void updateOnce();
@@ -40,8 +47,9 @@ private:
     static int32_t pitch_um; // microns per spindle revolution
 
     static volatile int8_t direction_mul;
+	static volatile bool bounds_exceeded;
 
-    static int32_t last_spindle_total;
+	static int32_t last_spindle_total;
     static int64_t step_accum_q16;
 
     static void *task_handle;
