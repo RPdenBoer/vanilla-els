@@ -31,9 +31,18 @@ void EncoderProxy::updateFromMotion(int32_t c_ticks, int16_t rpm, int16_t tgt_rp
     rpm_raw = (rpm < 0) ? -rpm : rpm;
     rpm_signed = rpm;
 
+	// Auto-toggle to RPM display mode when target RPM changes (while in RPM_CONTROL mode)
+	MpgModeProto newMode = static_cast<MpgModeProto>(mode);
+	if (newMode == MpgModeProto::RPM_CONTROL && tgt_rpm != target_rpm && tgt_rpm > 0)
+	{
+		// User adjusted the MPG wheel - switch to RPM display
+		c_manual_rpm_mode = true;
+		c_show_rpm = true;
+	}
+
 	// Store target RPM and MPG mode from motion board
 	target_rpm = tgt_rpm;
-	mpg_mode = static_cast<MpgModeProto>(mode);
+	mpg_mode = newMode;
 
 	// Update coordinate system raw C value
     CoordinateSystem::c_raw_ticks = c_ticks;
