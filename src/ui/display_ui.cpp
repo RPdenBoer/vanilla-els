@@ -1,5 +1,5 @@
-#include "display.h"
-#include "config.h"
+#include "display_ui.h"
+#include "config_ui.h"
 
 Arduino_DataBus *DisplayManager::bus = nullptr;
 Arduino_NV3041A *DisplayManager::panel = nullptr;

@@ -3,13 +3,14 @@
 #include <stdint.h>
 #include <cstddef>
 
-#include "config.h"
+#include "shared/config_shared.h"
 
 class CoordinateSystem {
 public:
-    // Raw values (microns for linear, ticks for rotary)
+    // Raw values from motion board (microns for linear, ticks for rotary)
     static int32_t x_raw_um;
     static int32_t z_raw_um;
+    static int32_t c_raw_ticks;
     
     // Work offsets (G54/G55 style), indexed by OffsetManager's current offset
     static int32_t x_global_um[OFFSET_COUNT];
