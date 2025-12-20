@@ -7,6 +7,8 @@
 #include "mono_font_ui.h"
 #include "leadscrew_proxy.h"
 #include "endstop_proxy.h"
+#include "spi_master.h"
+#include <Arduino.h>
 #include <cstring>
 #include <cstdio>
 
@@ -36,6 +38,9 @@ lv_obj_t *UIManager::lbl_c = nullptr;
 lv_obj_t *UIManager::lbl_x_unit = nullptr;
 lv_obj_t *UIManager::lbl_z_unit = nullptr;
 lv_obj_t *UIManager::lbl_c_unit = nullptr;
+lv_obj_t *UIManager::lbl_x_name = nullptr;
+lv_obj_t *UIManager::lbl_z_name = nullptr;
+lv_obj_t *UIManager::lbl_c_name = nullptr;
 lv_obj_t *UIManager::lbl_units_mode = nullptr;
 lv_obj_t *UIManager::lbl_pitch = nullptr;
 lv_obj_t *UIManager::lbl_pitch_mode = nullptr;
@@ -316,10 +321,10 @@ void UIManager::createUI() {
     lv_obj_center(lblr);
 
     // Axis rows
-    lv_obj_t *row_x = makeAxisRow(dro_col, "X", &lbl_x, onZeroX);
-    lv_obj_t *row_z = makeAxisRow(dro_col, "Z", &lbl_z, onZeroZ);
-    lv_obj_t *row_c = makeAxisRow(dro_col, "C", &lbl_c, onZeroC);
-    lv_obj_set_grid_cell(row_x, LV_GRID_ALIGN_STRETCH, 0, 1, LV_GRID_ALIGN_STRETCH, 0, 1);
+	lv_obj_t *row_x = makeAxisRow(dro_col, "X", &lbl_x, onZeroX, &lbl_x_name);
+	lv_obj_t *row_z = makeAxisRow(dro_col, "Z", &lbl_z, onZeroZ, &lbl_z_name);
+	lv_obj_t *row_c = makeAxisRow(dro_col, "C", &lbl_c, onZeroC, &lbl_c_name);
+	lv_obj_set_grid_cell(row_x, LV_GRID_ALIGN_STRETCH, 0, 1, LV_GRID_ALIGN_STRETCH, 0, 1);
     lv_obj_set_grid_cell(row_z, LV_GRID_ALIGN_STRETCH, 0, 1, LV_GRID_ALIGN_STRETCH, 1, 1);
     lv_obj_set_grid_cell(row_c, LV_GRID_ALIGN_STRETCH, 0, 1, LV_GRID_ALIGN_STRETCH, 2, 1);
 
@@ -362,9 +367,11 @@ void UIManager::createUI() {
     updateJogAvailability();
 }
 
-lv_obj_t* UIManager::makeAxisRow(lv_obj_t *parent, const char *name,
-                                 lv_obj_t **out_value_label, lv_event_cb_t zero_cb) {
-    lv_obj_t *row = lv_obj_create(parent);
+lv_obj_t *UIManager::makeAxisRow(lv_obj_t *parent, const char *name,
+								 lv_obj_t **out_value_label, lv_event_cb_t zero_cb,
+								 lv_obj_t **out_name_label)
+{
+	lv_obj_t *row = lv_obj_create(parent);
     lv_obj_set_width(row, LV_PCT(100));
     lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_pad_all(row, 2, 0);
@@ -378,19 +385,32 @@ lv_obj_t* UIManager::makeAxisRow(lv_obj_t *parent, const char *name,
     lv_obj_set_grid_dsc_array(row, col_dsc, row_dsc);
     lv_obj_set_style_pad_column(row, 0, 0);
 
-    // Hitbox for toggling modes
-    lv_obj_t *hitbox = lv_obj_create(row);
+	// Hitbox for toggling modes (short click) and MPG jog (long press for Z/C)
+	lv_obj_t *hitbox = lv_obj_create(row);
     lv_obj_set_style_bg_opa(hitbox, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(hitbox, 0, 0);
     lv_obj_set_style_pad_all(hitbox, 0, 0);
     lv_obj_clear_flag(hitbox, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(hitbox, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_grid_cell(hitbox, LV_GRID_ALIGN_STRETCH, 0, 2, LV_GRID_ALIGN_STRETCH, 0, 1);
-    if (strcmp(name, "X") == 0) lv_obj_add_event_cb(hitbox, onToggleXMode, LV_EVENT_CLICKED, nullptr);
-    else if (strcmp(name, "Z") == 0) lv_obj_add_event_cb(hitbox, onToggleZPolarity, LV_EVENT_CLICKED, nullptr);
-    else if (strcmp(name, "C") == 0) lv_obj_add_event_cb(hitbox, onToggleCMode, LV_EVENT_CLICKED, nullptr);
+	if (strcmp(name, "X") == 0)
+	{
+		lv_obj_add_event_cb(hitbox, onToggleXMode, LV_EVENT_CLICKED, nullptr);
+	}
+	else if (strcmp(name, "Z") == 0)
+	{
+		// Use SHORT_CLICKED so long press doesn't also trigger the toggle
+		lv_obj_add_event_cb(hitbox, onToggleZPolarity, LV_EVENT_SHORT_CLICKED, nullptr);
+		lv_obj_add_event_cb(hitbox, onLongPressZ, LV_EVENT_LONG_PRESSED, nullptr);
+	}
+	else if (strcmp(name, "C") == 0)
+	{
+		// Use SHORT_CLICKED so long press doesn't also trigger the toggle
+		lv_obj_add_event_cb(hitbox, onToggleCMode, LV_EVENT_SHORT_CLICKED, nullptr);
+		lv_obj_add_event_cb(hitbox, onLongPressC, LV_EVENT_LONG_PRESSED, nullptr);
+	}
 
-    lv_obj_t *lbl_name = lv_label_create(row);
+	lv_obj_t *lbl_name = lv_label_create(row);
     lv_label_set_text(lbl_name, name);
     lv_obj_set_style_text_font(lbl_name, &lv_font_montserrat_28, LV_PART_MAIN);
     lv_obj_set_style_text_color(lbl_name, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
@@ -428,7 +448,9 @@ lv_obj_t* UIManager::makeAxisRow(lv_obj_t *parent, const char *name,
     lv_obj_add_event_cb(lbl_val, zero_cb, LV_EVENT_CLICKED, nullptr);
 
     if (out_value_label) *out_value_label = lbl_val;
-    return row;
+	if (out_name_label)
+		*out_name_label = lbl_name;
+	return row;
 }
 
 void UIManager::update() {
@@ -453,8 +475,8 @@ void UIManager::update() {
         }
     }
 
-    // Update Z superscript
-    if (lbl_z_unit) {
+	// Update Z superscript (unchanged by jog mode)
+	if (lbl_z_unit) {
         if (CoordinateSystem::isZInverted()) {
             lv_label_set_text(lbl_z_unit, "neg");
             lv_obj_set_style_text_color(lbl_z_unit, lv_palette_main(LV_PALETTE_ORANGE), LV_PART_MAIN);
@@ -473,24 +495,61 @@ void UIManager::update() {
     CoordinateSystem::formatLinear(buf, sizeof(buf), CoordinateSystem::getDisplayZ(tool));
     lv_label_set_text(lbl_z, buf);
 
-    if (EncoderProxy::shouldShowRpm()) {
-        snprintf(buf, sizeof(buf), "%ld", (long)EncoderProxy::getRpmSigned());
-        lv_label_set_text(lbl_c, buf);
-        if (lbl_c_unit) {
-            lv_label_set_text(lbl_c_unit, "rpm");
-            lv_obj_set_style_text_color(lbl_c_unit, lv_palette_darken(LV_PALETTE_RED, 2), LV_PART_MAIN);
-        }
-    } else {
-        int32_t c_phase = CoordinateSystem::getDisplayC(EncoderProxy::getRawTicks(), tool);
-        CoordinateSystem::formatDeg(buf, sizeof(buf), CoordinateSystem::ticksToDegX100(c_phase));
-        lv_label_set_text(lbl_c, buf);
-        if (lbl_c_unit) {
+	// Z value color: red when in jog mode
+	MpgModeProto mpgModeZ = SpiMaster::getMpgMode();
+	bool isJogZ = (mpgModeZ == MpgModeProto::JOG_Z);
+	lv_obj_set_style_text_color(lbl_z, isJogZ ? lv_palette_main(LV_PALETTE_RED) : lv_color_white(), LV_PART_MAIN);
+
+	// C axis display: RPM when moving, degrees when stopped, grey target RPM when in RPM mode but stopped
+	bool isJogC = (SpiMaster::getMpgMode() == MpgModeProto::JOG_C);
+	bool spindleMoving = (abs(EncoderProxy::getRpmSigned()) > 10);
+
+	if (EncoderProxy::shouldShowRpm() && !isJogC)
+	{
+		// Normal RPM display (not in jog mode)
+		if (spindleMoving)
+		{
+			// Show actual RPM in white when spinning
+			snprintf(buf, sizeof(buf), "%ld", (long)EncoderProxy::getRpmSigned());
+			lv_label_set_text(lbl_c, buf);
+			lv_obj_set_style_text_color(lbl_c, lv_color_white(), LV_PART_MAIN);
+		}
+		else
+		{
+			// Show target RPM in blue-grey when stopped (stepper spindle mode)
+			int16_t targetRpm = EncoderProxy::getTargetRpm();
+			if (targetRpm > 0)
+			{
+				snprintf(buf, sizeof(buf), "%d", targetRpm);
+			}
+			else
+			{
+				snprintf(buf, sizeof(buf), "0");
+			}
+			lv_label_set_text(lbl_c, buf);
+			lv_obj_set_style_text_color(lbl_c, lv_palette_darken(LV_PALETTE_BLUE_GREY, 4), LV_PART_MAIN);
+		}
+		if (lbl_c_unit)
+		{
+			lv_label_set_text(lbl_c_unit, "rpm");
+			lv_obj_set_style_text_color(lbl_c_unit, lv_palette_darken(LV_PALETTE_RED, 2), LV_PART_MAIN);
+		}
+	}
+	else
+	{
+		// Degrees display (normal or jog mode - jog forces degrees)
+		int32_t c_phase = CoordinateSystem::getDisplayC(EncoderProxy::getRawTicks(), tool);
+		CoordinateSystem::formatDeg(buf, sizeof(buf), CoordinateSystem::ticksToDegX100(c_phase));
+		lv_label_set_text(lbl_c, buf);
+		// Value color: red in jog mode, white otherwise
+		lv_obj_set_style_text_color(lbl_c, isJogC ? lv_palette_main(LV_PALETTE_RED) : lv_color_white(), LV_PART_MAIN);
+		if (lbl_c_unit) {
             lv_label_set_text(lbl_c_unit, "deg");
             lv_obj_set_style_text_color(lbl_c_unit, lv_palette_darken(LV_PALETTE_GREEN, 2), LV_PART_MAIN);
         }
-    }
+	}
 
-    if (lbl_units_mode) lv_label_set_text(lbl_units_mode, CoordinateSystem::isLinearInchMode() ? "INCH" : "MM");
+	if (lbl_units_mode) lv_label_set_text(lbl_units_mode, CoordinateSystem::isLinearInchMode() ? "INCH" : "MM");
 
     if (lbl_pitch) {
         char pbuf[32]; LeadscrewProxy::formatPitchLabel(pbuf, sizeof(pbuf));
@@ -554,14 +613,16 @@ void UIManager::onToggleXMode(lv_event_t *e) {
 }
 
 void UIManager::onToggleZPolarity(lv_event_t *e) {
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    CoordinateSystem::toggleZInverted();
+	if (lv_event_get_code(e) != LV_EVENT_SHORT_CLICKED)
+		return;
+	CoordinateSystem::toggleZInverted();
     update();
 }
 
 void UIManager::onToggleCMode(lv_event_t *e) {
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    if (EncoderProxy::canToggleManualMode()) {
+	if (lv_event_get_code(e) != LV_EVENT_SHORT_CLICKED)
+		return;
+	if (EncoderProxy::canToggleManualMode()) {
         EncoderProxy::toggleManualRpmMode();
         update();
     }
@@ -587,6 +648,33 @@ void UIManager::onLongPressEndstopMax(lv_event_t *e) {
     (void)e;
     EndstopProxy::toggleMaxEnabled();
     updateEndstopButtonStates();
+}
+
+void UIManager::onLongPressZ(lv_event_t *e)
+{
+	(void)e;
+	// Toggle between RPM_CONTROL and JOG_Z mode
+	MpgModeProto currentMode = SpiMaster::getMpgMode();
+	MpgModeProto newMode = (currentMode == MpgModeProto::JOG_Z) ? MpgModeProto::RPM_CONTROL : MpgModeProto::JOG_Z;
+	SpiMaster::setMpgMode(newMode);
+	Serial.printf("[UI] MPG mode -> %s\n", newMode == MpgModeProto::JOG_Z ? "JOG_Z" : "RPM");
+}
+
+void UIManager::onLongPressC(lv_event_t *e)
+{
+	(void)e;
+	// Toggle between RPM_CONTROL and JOG_C mode
+	MpgModeProto currentMode = SpiMaster::getMpgMode();
+	MpgModeProto newMode = (currentMode == MpgModeProto::JOG_C) ? MpgModeProto::RPM_CONTROL : MpgModeProto::JOG_C;
+	SpiMaster::setMpgMode(newMode);
+
+	// When entering jog mode, force degrees display (exit manual RPM mode if active)
+	if (newMode == MpgModeProto::JOG_C && EncoderProxy::isManualRpmMode())
+	{
+		EncoderProxy::toggleManualRpmMode(); // Turn off manual RPM mode
+	}
+
+	Serial.printf("[UI] MPG mode -> %s\n", newMode == MpgModeProto::JOG_C ? "JOG_C" : "RPM");
 }
 
 void UIManager::updateEndstopButtonStates() {

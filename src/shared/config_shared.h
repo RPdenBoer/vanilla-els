@@ -13,7 +13,15 @@ static constexpr int TOOL_COUNT = 8;
 // Work offset system (G54/G55 style)
 static constexpr int OFFSET_COUNT = 3;
 
-// Encoder configuration
+// ============================================================================
+// Spindle Configuration
+// ============================================================================
+// Encoder mode: external motor with quadrature encoder feedback
+// Stepper mode: ESP32-driven stepper motor (step count = position)
+
+// Spindle counts per revolution (applies to both modes)
+// For encoder: quadrature counts per rev of the physical encoder
+// For stepper: steps per rev of the stepper motor
 static constexpr int32_t C_COUNTS_PER_REV = 1600;
 
 // ELS gearing configuration

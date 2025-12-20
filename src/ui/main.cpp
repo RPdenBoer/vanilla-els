@@ -29,11 +29,12 @@ static void updateFromMotionBoard() {
     // Update raw position values in coordinate system
     CoordinateSystem::x_raw_um = status.x_count * X_UM_PER_COUNT;
     CoordinateSystem::z_raw_um = status.z_count * Z_UM_PER_COUNT;
-    
-    // Update encoder proxy with spindle data
-    EncoderProxy::updateFromMotion(status.c_count, status.rpm_signed);
-    
-    // Check for endstop hit flag from motion board
+
+	// Update encoder proxy with spindle data and MPG state
+	EncoderProxy::updateFromMotion(status.c_count, status.rpm_signed,
+								   status.target_rpm, status.flags.mpg_mode);
+
+	// Check for endstop hit flag from motion board
     if (status.flags.endstop_hit) {
         LeadscrewProxy::setBoundsExceeded(true);
     }

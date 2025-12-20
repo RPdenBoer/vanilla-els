@@ -23,7 +23,9 @@ public:
     static void onEditEndstopMax(lv_event_t *e);
     static void onLongPressEndstopMin(lv_event_t *e);
     static void onLongPressEndstopMax(lv_event_t *e);
-    static void updateEndstopButtonStates();
+	static void onLongPressZ(lv_event_t *e);
+	static void onLongPressC(lv_event_t *e);
+	static void updateEndstopButtonStates();
     static void forceElsOff();
     static void setElsButtonActive(bool active);
 
@@ -39,7 +41,10 @@ private:
     static lv_obj_t *lbl_x_unit;
     static lv_obj_t *lbl_z_unit;
     static lv_obj_t *lbl_c_unit;
-    static lv_obj_t *lbl_units_mode;
+	static lv_obj_t *lbl_x_name;
+	static lv_obj_t *lbl_z_name;
+	static lv_obj_t *lbl_c_name;
+	static lv_obj_t *lbl_units_mode;
     static lv_obj_t *lbl_pitch;
     static lv_obj_t *lbl_pitch_mode;
     static lv_obj_t *lbl_els;
@@ -49,8 +54,9 @@ private:
 
     static void createUI();
     static void updateJogAvailability();
-    static lv_obj_t* makeAxisRow(lv_obj_t *parent, const char *name,
-                                 lv_obj_t **out_value_label, lv_event_cb_t zero_cb);
+	static lv_obj_t *makeAxisRow(lv_obj_t *parent, const char *name,
+								 lv_obj_t **out_value_label, lv_event_cb_t zero_cb,
+								 lv_obj_t **out_name_label);
 };
 
 // Global function for modal callback
