@@ -7,3 +7,5 @@ Intended to be used with:
 Comms between the two via high speed SPI
 
 Supports both servo/stepper spindle (directly controlled, no feedback) or simple motor spindle (encoder feedback)
+
+WARNING: This codebase written with the assistance of multiple LLMs. Use at your own risk.
