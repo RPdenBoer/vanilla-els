@@ -100,7 +100,7 @@ void UIManager::createUI() {
     lv_obj_set_style_pad_column(scr, 4, 0);
 
     static int32_t scr_col_dsc[] = {LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
-    static int32_t scr_row_dsc[] = {LV_GRID_FR(1), 44, LV_GRID_TEMPLATE_LAST};
+    static int32_t scr_row_dsc[] = {LV_GRID_FR(1), 48, LV_GRID_TEMPLATE_LAST};
     lv_obj_set_layout(scr, LV_LAYOUT_GRID);
     lv_obj_set_grid_dsc_array(scr, scr_col_dsc, scr_row_dsc);
 
@@ -123,7 +123,7 @@ void UIManager::createUI() {
     lv_obj_set_style_bg_opa(dro_col, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(dro_col, 0, 0);
     lv_obj_set_style_pad_all(dro_col, 0, 0);
-    lv_obj_set_style_pad_row(dro_col, 4, 0);
+    lv_obj_set_style_pad_row(dro_col, 2, 0);
 
     static int32_t dro_col_dsc[] = {LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
     static int32_t dro_row_dsc[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
@@ -142,7 +142,7 @@ void UIManager::createUI() {
     // Work offset selector (G1/G2/G3)
     lv_obj_t *offset_row = lv_obj_create(feature_col);
     lv_obj_set_width(offset_row, LV_PCT(100));
-    lv_obj_set_height(offset_row, 44);
+    lv_obj_set_height(offset_row, 48);
     lv_obj_clear_flag(offset_row, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_bg_opa(offset_row, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(offset_row, 0, 0);
@@ -153,7 +153,7 @@ void UIManager::createUI() {
 
     for (int i = 0; i < OFFSET_COUNT; i++) {
         lv_obj_t *btn = lv_btn_create(offset_row);
-        lv_obj_set_height(btn, 40);
+        lv_obj_set_height(btn, 44);
         lv_obj_set_flex_grow(btn, 1);
         lv_obj_clear_flag(btn, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_add_flag(btn, LV_OBJ_FLAG_CHECKABLE);
@@ -343,7 +343,7 @@ void UIManager::createUI() {
     // Tool row
     lv_obj_t *tool_row = lv_obj_create(scr);
     lv_obj_set_grid_cell(tool_row, LV_GRID_ALIGN_STRETCH, 0, 1, LV_GRID_ALIGN_STRETCH, 1, 1);
-    lv_obj_set_size(tool_row, LV_PCT(100), 44);
+    lv_obj_set_size(tool_row, LV_PCT(100), 48);
     lv_obj_clear_flag(tool_row, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_bg_opa(tool_row, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(tool_row, 0, 0);
@@ -353,7 +353,7 @@ void UIManager::createUI() {
 
     for (int i = 0; i < TOOL_COUNT; i++) {
         lv_obj_t *btn = lv_btn_create(tool_row);
-        lv_obj_set_height(btn, 40);
+        lv_obj_set_height(btn, 44);
         lv_obj_set_flex_grow(btn, 1);
         lv_obj_clear_flag(btn, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_add_flag(btn, LV_OBJ_FLAG_CHECKABLE);
@@ -386,7 +386,7 @@ lv_obj_t *UIManager::makeAxisRow(lv_obj_t *parent, const char *name,
 	lv_obj_t *row = lv_obj_create(parent);
     lv_obj_set_width(row, LV_PCT(100));
     lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_pad_all(row, 2, 0);
+    lv_obj_set_style_pad_all(row, 1, 0);
     lv_obj_set_style_bg_color(row, lv_color_hex(0x000000), 0);
     lv_obj_set_style_bg_opa(row, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(row, 0, 0);

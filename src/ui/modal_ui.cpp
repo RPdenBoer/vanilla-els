@@ -335,7 +335,7 @@ void ModalManager::showOffsetModal(AxisSel axis) {
     lv_textarea_set_cursor_click_pos(ta_value, true);
     lv_obj_clear_flag(ta_value, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_event_cb(ta_value, onTextareaClicked, LV_EVENT_CLICKED, nullptr);
-    lv_obj_set_style_text_font(ta_value, &lv_font_montserrat_24, LV_PART_MAIN);
+    lv_obj_set_style_text_font(ta_value, &lv_font_montserrat_28, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(ta_value, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(ta_value, 0, LV_PART_MAIN);
 	// Selection styling - blue-grey to match modal buttons
@@ -360,7 +360,7 @@ void ModalManager::showOffsetModal(AxisSel axis) {
 
     // T button
     lv_obj_t *btn_t = lv_btn_create(row);
-    lv_obj_set_size(btn_t, main_g_btn_w, 40);
+    lv_obj_set_size(btn_t, main_g_btn_w, 44);
     lv_obj_add_event_cb(btn_t, onSetTool, LV_EVENT_CLICKED, nullptr);
     lv_obj_set_style_bg_color(btn_t, lv_palette_darken(LV_PALETTE_ORANGE, 2), LV_PART_MAIN);
     lv_obj_set_style_text_color(btn_t, lv_color_white(), LV_PART_MAIN);
@@ -372,7 +372,7 @@ void ModalManager::showOffsetModal(AxisSel axis) {
 
     // G button
     lv_obj_t *btn_g = lv_btn_create(row);
-    lv_obj_set_size(btn_g, main_g_btn_w, 40);
+    lv_obj_set_size(btn_g, main_g_btn_w, 44);
     lv_obj_add_event_cb(btn_g, onSetGlobal, LV_EVENT_CLICKED, nullptr);
     lv_obj_set_style_bg_color(btn_g, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_MAIN);
     lv_obj_set_style_text_color(btn_g, lv_color_white(), LV_PART_MAIN);
@@ -384,7 +384,7 @@ void ModalManager::showOffsetModal(AxisSel axis) {
 
     // X button
     lv_obj_t *btn_x = lv_btn_create(row);
-    lv_obj_set_size(btn_x, main_g_btn_w, 40);
+    lv_obj_set_size(btn_x, main_g_btn_w, 44);
     lv_obj_add_event_cb(btn_x, onCancel, LV_EVENT_CLICKED, nullptr);
     lv_obj_set_style_bg_opa(btn_x, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(btn_x, 1, LV_PART_MAIN);
@@ -422,7 +422,7 @@ void ModalManager::showPitchModal() {
     lv_textarea_set_one_line(ta_value, true);
     lv_obj_clear_flag(ta_value, LV_OBJ_FLAG_SCROLLABLE);
 	lv_obj_add_event_cb(ta_value, onTextareaClicked, LV_EVENT_CLICKED, nullptr);
-	lv_obj_set_style_text_font(ta_value, &lv_font_montserrat_24, LV_PART_MAIN);
+	lv_obj_set_style_text_font(ta_value, &lv_font_montserrat_28, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(ta_value, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(ta_value, 0, LV_PART_MAIN);
 	// Selection styling - blue-grey to match modal buttons
@@ -445,7 +445,7 @@ void ModalManager::showPitchModal() {
     const int btn_w = OffsetManager::getMainOffsetButtonWidth();
 
     lv_obj_t *btn_ok = lv_btn_create(row);
-    lv_obj_set_size(btn_ok, btn_w, 40);
+    lv_obj_set_size(btn_ok, btn_w, 44);
     lv_obj_add_event_cb(btn_ok, onPitchOk, LV_EVENT_CLICKED, nullptr);
     lv_obj_set_style_bg_color(btn_ok, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_MAIN);
     lv_obj_set_style_text_color(btn_ok, lv_color_white(), LV_PART_MAIN);
@@ -455,7 +455,7 @@ void ModalManager::showPitchModal() {
     apply_modal_button_common_style(btn_ok);
 
     lv_obj_t *btn_x = lv_btn_create(row);
-    lv_obj_set_size(btn_x, btn_w, 40);
+    lv_obj_set_size(btn_x, btn_w, 44);
     lv_obj_add_event_cb(btn_x, onCancel, LV_EVENT_CLICKED, nullptr);
     lv_obj_set_style_bg_opa(btn_x, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(btn_x, 1, LV_PART_MAIN);
@@ -492,7 +492,7 @@ void ModalManager::showEndstopModal(bool is_max) {
     lv_textarea_set_one_line(ta_value, true);
     lv_obj_clear_flag(ta_value, LV_OBJ_FLAG_SCROLLABLE);
 	lv_obj_add_event_cb(ta_value, onTextareaClicked, LV_EVENT_CLICKED, nullptr);
-	lv_obj_set_style_text_font(ta_value, &lv_font_montserrat_24, LV_PART_MAIN);
+	lv_obj_set_style_text_font(ta_value, &lv_font_montserrat_28, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(ta_value, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(ta_value, 0, LV_PART_MAIN);
 	// Selection styling - blue-grey to match modal buttons
@@ -512,7 +512,7 @@ void ModalManager::showEndstopModal(bool is_max) {
     const int btn_w = OffsetManager::getMainOffsetButtonWidth();
 
     lv_obj_t *btn_ok = lv_btn_create(row);
-    lv_obj_set_size(btn_ok, btn_w, 40);
+    lv_obj_set_size(btn_ok, btn_w, 44);
     lv_obj_add_event_cb(btn_ok, onEndstopOk, LV_EVENT_CLICKED, nullptr);
     lv_obj_set_style_bg_color(btn_ok, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_MAIN);
     lv_obj_set_style_text_color(btn_ok, lv_color_white(), LV_PART_MAIN);
@@ -522,7 +522,7 @@ void ModalManager::showEndstopModal(bool is_max) {
     apply_modal_button_common_style(btn_ok);
 
     lv_obj_t *btn_x = lv_btn_create(row);
-    lv_obj_set_size(btn_x, btn_w, 40);
+    lv_obj_set_size(btn_x, btn_w, 44);
     lv_obj_add_event_cb(btn_x, onCancel, LV_EVENT_CLICKED, nullptr);
     lv_obj_set_style_bg_opa(btn_x, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(btn_x, 1, LV_PART_MAIN);
