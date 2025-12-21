@@ -38,14 +38,14 @@ static constexpr int SPINDLE_EN_PIN = -1; // -1 = no enable pin / always enabled
 // 1600 steps/rev at 3000 RPM = 80kHz pulse rate (well within ESP32 capability)
 static constexpr int32_t SPINDLE_STEPS_PER_REV = 1600;
 static constexpr int32_t SPINDLE_MAX_RPM = 3000;
-static constexpr int32_t SPINDLE_MIN_RPM = 10; // Minimum commanded RPM
+static constexpr int32_t SPINDLE_MIN_RPM = 1; // Minimum commanded RPM
 static constexpr bool SPINDLE_INVERT_DIR = false;
 
 // MPG (Manual Pulse Generator) encoder for speed control
 // Quadrature encoder replaces potentiometer for precise RPM adjustment
 static constexpr int MPG_PINA = 12;					  // 34;					  // MPG encoder A (input only pin)
 static constexpr int MPG_PINB = 13;					  // 39;					  // MPG encoder B (input only pin, VN)
-static constexpr int32_t MPG_COUNTS_TO_MAX_RPM = 800; // 800 counts = 0-3000 RPM range (200 PPR * 4 quadrature)
+static constexpr int32_t MPG_COUNTS_TO_MAX_RPM = 200 * 4 * 3; // 0-3000 RPM range (200 PPR * 4 quadrature)
 static constexpr bool MPG_INVERT_DIR = false;
 
 // Direction switch inputs (active LOW with internal pullups)

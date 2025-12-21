@@ -58,8 +58,11 @@ static void sendCommandsToMotionBoard() {
 // ============================================================================
 static void ui_timer_cb(lv_timer_t *t) {
     (void)t;
-    
-    // Get latest data from motion board
+
+	// Poll physical buttons
+	UIManager::pollPhysicalButtons();
+
+	// Get latest data from motion board
     updateFromMotionBoard();
     
     // Send commands to motion board
@@ -129,7 +132,8 @@ void setup() {
 
     // Initialize UI
     UIManager::init();
-    Serial.println("[UI] UI init");
+	UIManager::initPhysicalButtons();
+	Serial.println("[UI] UI init");
 
     // Create timer for periodic updates (50ms = 20Hz)
     lv_timer_create(ui_timer_cb, 50, nullptr);
