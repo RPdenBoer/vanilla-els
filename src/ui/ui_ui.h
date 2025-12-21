@@ -28,15 +28,18 @@ public:
 	static void updateEndstopButtonStates();
     static void forceElsOff();
     static void setElsButtonActive(bool active);
+	static void initPhysicalButtons();
+	static void pollPhysicalButtons();
+	static void triggerElsLeft();
+	static void triggerElsRight();
 
 private:
     static lv_obj_t *lbl_x;
     static lv_obj_t *lbl_z;
     static lv_obj_t *lbl_c;
     static lv_obj_t *btn_jog_l;
-    static lv_obj_t *btn_jog_r;
-    static lv_obj_t *btn_els_ptr;
-    static lv_obj_t *btn_endstop_min_ptr;
+	static lv_obj_t *btn_jog_r;
+	static lv_obj_t *btn_endstop_min_ptr;
     static lv_obj_t *btn_endstop_max_ptr;
     static lv_obj_t *lbl_x_unit;
     static lv_obj_t *lbl_z_unit;
@@ -46,13 +49,14 @@ private:
 	static lv_obj_t *lbl_c_name;
 	static lv_obj_t *lbl_units_mode;
     static lv_obj_t *lbl_pitch;
-    static lv_obj_t *lbl_pitch_mode;
-    static lv_obj_t *lbl_els;
-    static bool els_latched;
+	static lv_obj_t *lbl_pitch_mode;
+	static bool els_latched;
     static bool endstop_min_long_pressed;
     static bool endstop_max_long_pressed;
+	static bool btn_left_last;
+	static bool btn_right_last;
 
-    static void createUI();
+	static void createUI();
     static void updateJogAvailability();
 	static lv_obj_t *makeAxisRow(lv_obj_t *parent, const char *name,
 								 lv_obj_t **out_value_label, lv_event_cb_t zero_cb,
