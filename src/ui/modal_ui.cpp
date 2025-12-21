@@ -10,6 +10,8 @@
 #include <cstring>
 #include <cstdio>
 #include <cmath>
+#include <cstdlib>
+#include <cctype>
 
 // Disable LVGL theme transitions
 static const lv_style_prop_t NO_TRANS_PROPS[] = {0};
@@ -67,6 +69,55 @@ static void trim_trailing_zeros_inplace(char *s) {
     while (end > dot && *end == '0') *end-- = '\0';
     if (end == dot) *end = '\0';
     if (strcmp(s, "-0") == 0) { s[0] = '0'; s[1] = '\0'; }
+}
+
+static const char *skip_spaces(const char *p) {
+    while (p && *p && isspace(static_cast<unsigned char>(*p))) ++p;
+    return p;
+}
+
+static bool parse_add_sub_expression(const char *s, double *out) {
+    if (!s || !out) return false;
+    const char *p = skip_spaces(s);
+    if (!p || *p == '\0') return false;
+
+    char *end = nullptr;
+    double value = strtod(p, &end);
+    if (end == p) return false;
+    p = skip_spaces(end);
+
+    while (p && (*p == '+' || *p == '-')) {
+        char op = *p++;
+        p = skip_spaces(p);
+        if (!p || *p == '\0') return false;
+        double rhs = strtod(p, &end);
+        if (end == p) return false;
+        value = (op == '+') ? (value + rhs) : (value - rhs);
+        p = skip_spaces(end);
+    }
+
+    if (p && *p != '\0') return false;
+    *out = value;
+    return true;
+}
+
+static bool parse_linear_expression_to_um(const char *s, int32_t *out_um) {
+    double value = 0.0;
+    if (!parse_add_sub_expression(s, &value)) return false;
+    float v = static_cast<float>(value);
+    if (!CoordinateSystem::isLinearInchMode()) {
+        *out_um = (int32_t)lroundf(v * 1000.0f);
+        return true;
+    }
+    *out_um = (int32_t)lroundf(v * 25400.0f);
+    return true;
+}
+
+static bool parse_deg_expression_to_degx100(const char *s, int32_t *out_deg_x100) {
+    double value = 0.0;
+    if (!parse_add_sub_expression(s, &value)) return false;
+    *out_deg_x100 = (int32_t)lroundf((float)value * 100.0f);
+    return true;
 }
 
 static void apply_modal_button_common_style(lv_obj_t *btn);
@@ -128,7 +179,33 @@ static lv_obj_t *create_numpad(lv_obj_t *parent) {
     make_key(0, 0, "7", '7'); make_key(1, 0, "8", '8'); make_key(2, 0, "9", '9');
     make_key(0, 1, "4", '4'); make_key(1, 1, "5", '5'); make_key(2, 1, "6", '6');
     make_key(0, 2, "1", '1'); make_key(1, 2, "2", '2'); make_key(2, 2, "3", '3');
-    make_key(0, 3, "+/-", '-'); make_key(1, 3, "0", '0'); make_key(2, 3, ".", '.');
+
+    lv_obj_t *pm_cell = lv_obj_create(grid);
+    lv_obj_set_grid_cell(pm_cell, LV_GRID_ALIGN_STRETCH, 0, 1, LV_GRID_ALIGN_STRETCH, 3, 1);
+    lv_obj_clear_flag(pm_cell, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_opa(pm_cell, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(pm_cell, 0, 0);
+    lv_obj_set_style_pad_all(pm_cell, 0, 0);
+    lv_obj_set_style_pad_gap(pm_cell, 2, 0);
+    lv_obj_set_flex_flow(pm_cell, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(pm_cell, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    auto make_pm_key = [&](lv_obj_t *parent, const char *txt, int keycode) {
+        lv_obj_t *btn = lv_btn_create(parent);
+        lv_obj_set_height(btn, LV_PCT(100));
+        lv_obj_set_flex_grow(btn, 1);
+        lv_obj_clear_flag(btn, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_event_cb(btn, ModalManager::onNumpadKey, LV_EVENT_CLICKED, (void *)(intptr_t)keycode);
+        apply_numpad_key_style(btn);
+        lv_obj_t *lbl = lv_label_create(btn);
+        lv_label_set_text(lbl, txt);
+        lv_obj_center(lbl);
+    };
+
+    make_pm_key(pm_cell, "-", '-');
+    make_pm_key(pm_cell, "+", '+');
+
+    make_key(1, 3, "0", '0'); make_key(2, 3, ".", '.');
 
     lv_obj_t *right_col = lv_obj_create(pad_row);
     lv_obj_set_width(right_col, 92);
@@ -174,6 +251,47 @@ static void apply_modal_button_common_style(lv_obj_t *btn) {
     lv_obj_set_style_transition(btn, &NO_TRANSITION, LV_PART_MAIN | LV_STATE_PRESSED);
 }
 
+static void create_modal_base(lv_obj_t **out_bg, lv_obj_t **out_win) {
+    if (!out_bg || !out_win) return;
+
+    lv_obj_t *bg = lv_obj_create(lv_layer_top());
+    lv_obj_set_size(bg, LV_PCT(100), LV_PCT(100));
+    lv_obj_set_style_bg_color(bg, lv_color_hex(0x000000), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(bg, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(bg, 0, LV_PART_MAIN);
+    lv_obj_add_flag(bg, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_clear_flag(bg, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_pad_all(bg, 0, 0);
+
+    lv_obj_t *win = lv_obj_create(bg);
+    lv_obj_set_size(win, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(win, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_pad_all(win, 6, 0);
+    lv_obj_set_style_pad_gap(win, 6, 0);
+    lv_obj_set_style_bg_color(win, lv_color_hex(0x000000), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(win, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(win, 0, LV_PART_MAIN);
+    lv_obj_set_style_radius(win, 0, LV_PART_MAIN);
+    lv_obj_set_flex_flow(win, LV_FLEX_FLOW_COLUMN);
+
+    *out_bg = bg;
+    *out_win = win;
+}
+
+static lv_obj_t *create_modal_row(lv_obj_t *parent) {
+    lv_obj_t *row = lv_obj_create(parent);
+    lv_obj_set_width(row, LV_PCT(100));
+    lv_obj_set_height(row, 56);
+    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row, 0, 0);
+    lv_obj_set_style_pad_all(row, 0, 0);
+    lv_obj_set_style_pad_gap(row, 8, 0);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    return row;
+}
+
 // Forward declaration for UI update
 void updateEndstopButtonStates();
 
@@ -192,50 +310,23 @@ void ModalManager::showOffsetModal(AxisSel axis) {
     pitch_modal = false;
     endstop_modal = false;
 
-    modal_bg = lv_obj_create(lv_layer_top());
-    lv_obj_set_size(modal_bg, LV_PCT(100), LV_PCT(100));
-    lv_obj_set_style_bg_color(modal_bg, lv_color_hex(0x000000), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(modal_bg, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_border_width(modal_bg, 0, LV_PART_MAIN);
-    lv_obj_add_flag(modal_bg, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_clear_flag(modal_bg, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_pad_all(modal_bg, 0, 0);
-
-    modal_win = lv_obj_create(modal_bg);
-    lv_obj_set_size(modal_win, LV_PCT(100), LV_PCT(100));
-    lv_obj_clear_flag(modal_win, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_pad_all(modal_win, 6, 0);
-    lv_obj_set_style_pad_gap(modal_win, 6, 0);
-    lv_obj_set_style_bg_color(modal_win, lv_color_hex(0x000000), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(modal_win, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_border_width(modal_win, 0, LV_PART_MAIN);
-    lv_obj_set_style_radius(modal_win, 0, LV_PART_MAIN);
-    lv_obj_set_flex_flow(modal_win, LV_FLEX_FLOW_COLUMN);
+    create_modal_base(&modal_bg, &modal_win);
 
     lv_obj_t *title = lv_label_create(modal_win);
-    const char *lin_unit = CoordinateSystem::isLinearInchMode() ? "in" : "mm";
+    const char *lin_unit = CoordinateSystem::isLinearInchMode() ? "inch" : "mm";
     char tbuf[48];
     if (axis == AXIS_X) {
-        snprintf(tbuf, sizeof(tbuf), "Set X (%s %s)", lin_unit, CoordinateSystem::isXRadiusMode() ? "rad" : "dia");
+        snprintf(tbuf, sizeof(tbuf), "Set X (%s %s)", lin_unit, CoordinateSystem::isXRadiusMode() ? "radius" : "diameter");
     } else if (axis == AXIS_Z) {
-        snprintf(tbuf, sizeof(tbuf), "Set Z (%s %s)", lin_unit, CoordinateSystem::isZInverted() ? "neg" : "pos");
+        snprintf(tbuf, sizeof(tbuf), "Set Z (%s %s)", lin_unit, CoordinateSystem::isZInverted() ? "negative" : "positive");
     } else {
-        snprintf(tbuf, sizeof(tbuf), "Set C (deg)");
+        snprintf(tbuf, sizeof(tbuf), "Set C (degrees)");
     }
     lv_label_set_text(title, tbuf);
     lv_obj_set_style_text_font(title, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(title, modal_accent_blue_grey(), 0);
 
-    lv_obj_t *row = lv_obj_create(modal_win);
-    lv_obj_set_width(row, LV_PCT(100));
-    lv_obj_set_height(row, 56);
-    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(row, 0, 0);
-    lv_obj_set_style_pad_all(row, 0, 0);
-    lv_obj_set_style_pad_gap(row, 8, 0);
-    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_t *row = create_modal_row(modal_win);
 
     ta_value = lv_textarea_create(row);
     lv_obj_set_height(ta_value, 56);
@@ -312,42 +403,18 @@ void ModalManager::showPitchModal() {
     pitch_modal = true;
     endstop_modal = false;
 
-    modal_bg = lv_obj_create(lv_layer_top());
-    lv_obj_set_size(modal_bg, LV_PCT(100), LV_PCT(100));
-    lv_obj_set_style_bg_color(modal_bg, lv_color_hex(0x000000), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(modal_bg, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_border_width(modal_bg, 0, LV_PART_MAIN);
-    lv_obj_add_flag(modal_bg, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_clear_flag(modal_bg, LV_OBJ_FLAG_SCROLLABLE);
-
-    modal_win = lv_obj_create(modal_bg);
-    lv_obj_set_size(modal_win, LV_PCT(100), LV_PCT(100));
-    lv_obj_clear_flag(modal_win, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_pad_all(modal_win, 6, 0);
-    lv_obj_set_style_pad_gap(modal_win, 6, 0);
-    lv_obj_set_style_bg_color(modal_win, lv_color_hex(0x000000), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(modal_win, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_border_width(modal_win, 0, LV_PART_MAIN);
-    lv_obj_set_flex_flow(modal_win, LV_FLEX_FLOW_COLUMN);
+    create_modal_base(&modal_bg, &modal_win);
 
     lv_obj_t *title = lv_label_create(modal_win);
     if (LeadscrewProxy::isPitchTpiMode()) {
         lv_label_set_text(title, "Pitch (TPI)");
     } else {
-        lv_label_set_text(title, CoordinateSystem::isLinearInchMode() ? "Pitch (in)" : "Pitch (mm)");
+        lv_label_set_text(title, CoordinateSystem::isLinearInchMode() ? "Pitch (inch)" : "Pitch (mm)");
     }
     lv_obj_set_style_text_font(title, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(title, modal_accent_blue_grey(), 0);
 
-    lv_obj_t *row = lv_obj_create(modal_win);
-    lv_obj_set_width(row, LV_PCT(100));
-    lv_obj_set_height(row, 56);
-    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(row, 0, 0);
-    lv_obj_set_style_pad_all(row, 0, 0);
-    lv_obj_set_style_pad_gap(row, 8, 0);
-    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_t *row = create_modal_row(modal_win);
 
     ta_value = lv_textarea_create(row);
     lv_obj_set_height(ta_value, 56);
@@ -407,41 +474,17 @@ void ModalManager::showEndstopModal(bool is_max) {
     endstop_modal = true;
     endstop_is_max = is_max;
 
-    modal_bg = lv_obj_create(lv_layer_top());
-    lv_obj_set_size(modal_bg, LV_PCT(100), LV_PCT(100));
-    lv_obj_set_style_bg_color(modal_bg, lv_color_hex(0x000000), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(modal_bg, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_border_width(modal_bg, 0, LV_PART_MAIN);
-    lv_obj_add_flag(modal_bg, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_clear_flag(modal_bg, LV_OBJ_FLAG_SCROLLABLE);
-
-    modal_win = lv_obj_create(modal_bg);
-    lv_obj_set_size(modal_win, LV_PCT(100), LV_PCT(100));
-    lv_obj_clear_flag(modal_win, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_pad_all(modal_win, 6, 0);
-    lv_obj_set_style_pad_gap(modal_win, 6, 0);
-    lv_obj_set_style_bg_color(modal_win, lv_color_hex(0x000000), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(modal_win, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_border_width(modal_win, 0, LV_PART_MAIN);
-    lv_obj_set_flex_flow(modal_win, LV_FLEX_FLOW_COLUMN);
+    create_modal_base(&modal_bg, &modal_win);
 
     lv_obj_t *title = lv_label_create(modal_win);
-    const char *unit = CoordinateSystem::isLinearInchMode() ? "in" : "mm";
+    const char *unit = CoordinateSystem::isLinearInchMode() ? "inch" : "mm";
     char tbuf[32];
     snprintf(tbuf, sizeof(tbuf), "Z %s %s (%s)", is_max ? "Max" : "Min", is_max ? "]" : "[", unit);
     lv_label_set_text(title, tbuf);
     lv_obj_set_style_text_font(title, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(title, modal_accent_blue_grey(), 0);
 
-    lv_obj_t *row = lv_obj_create(modal_win);
-    lv_obj_set_width(row, LV_PCT(100));
-    lv_obj_set_height(row, 56);
-    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(row, 0, 0);
-    lv_obj_set_style_pad_all(row, 0, 0);
-    lv_obj_set_style_pad_gap(row, 8, 0);
-    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_t *row = create_modal_row(modal_win);
 
     ta_value = lv_textarea_create(row);
     lv_obj_set_height(ta_value, 56);
@@ -466,7 +509,7 @@ void ModalManager::showEndstopModal(bool is_max) {
     lv_textarea_set_text(ta_value, pbuf);
     mark_select_all(ta_value);
 
-    const int btn_w = 50;
+    const int btn_w = OffsetManager::getMainOffsetButtonWidth();
 
     lv_obj_t *btn_ok = lv_btn_create(row);
     lv_obj_set_size(btn_ok, btn_w, 40);
@@ -477,16 +520,6 @@ void ModalManager::showEndstopModal(bool is_max) {
     lv_label_set_text(lblo, "OK");
     lv_obj_center(lblo);
     apply_modal_button_common_style(btn_ok);
-
-    lv_obj_t *btn_clr = lv_btn_create(row);
-    lv_obj_set_size(btn_clr, btn_w, 40);
-    lv_obj_add_event_cb(btn_clr, onEndstopClear, LV_EVENT_CLICKED, nullptr);
-    lv_obj_set_style_bg_color(btn_clr, lv_palette_darken(LV_PALETTE_ORANGE, 2), LV_PART_MAIN);
-    lv_obj_set_style_text_color(btn_clr, lv_color_white(), LV_PART_MAIN);
-    lv_obj_t *lblclr = lv_label_create(btn_clr);
-    lv_label_set_text(lblclr, "CLR");
-    lv_obj_center(lblclr);
-    apply_modal_button_common_style(btn_clr);
 
     lv_obj_t *btn_x = lv_btn_create(row);
     lv_obj_set_size(btn_x, btn_w, 40);
@@ -521,17 +554,20 @@ void ModalManager::applyToolOffset() {
 
     if (active_axis == AXIS_X) {
         int32_t target_um = 0;
-        CoordinateSystem::parseLinearToUm(txt, &target_um);
+        if (!parse_linear_expression_to_um(txt, &target_um))
+            CoordinateSystem::parseLinearToUm(txt, &target_um);
         int32_t target_machine_um = CoordinateSystem::xUserToMachineUm(target_um);
         CoordinateSystem::x_tool_um[tool] = CoordinateSystem::x_raw_um - CoordinateSystem::x_global_um[off] - target_machine_um;
     } else if (active_axis == AXIS_Z) {
         int32_t target_um = 0;
-        CoordinateSystem::parseLinearToUm(txt, &target_um);
+        if (!parse_linear_expression_to_um(txt, &target_um))
+            CoordinateSystem::parseLinearToUm(txt, &target_um);
         int32_t target_machine_um = CoordinateSystem::zUserToMachineUm(target_um);
         CoordinateSystem::z_tool_um[tool] = CoordinateSystem::z_raw_um - CoordinateSystem::z_global_um[off] - target_machine_um;
     } else {
         int32_t target_deg_x100 = 0;
-        CoordinateSystem::parseDegToDegX100(txt, &target_deg_x100);
+        if (!parse_deg_expression_to_degx100(txt, &target_deg_x100))
+            CoordinateSystem::parseDegToDegX100(txt, &target_deg_x100);
         int32_t target_ticks = CoordinateSystem::degX100ToTicks(target_deg_x100);
         int32_t raw = CoordinateSystem::wrap01599(EncoderProxy::getRawTicks());
         CoordinateSystem::c_tool_ticks[tool] = CoordinateSystem::wrap01599(raw - CoordinateSystem::c_global_ticks[off] - target_ticks);
@@ -547,17 +583,20 @@ void ModalManager::applyGlobalOffset() {
 
     if (active_axis == AXIS_X) {
         int32_t target_um = 0;
-        CoordinateSystem::parseLinearToUm(txt, &target_um);
+        if (!parse_linear_expression_to_um(txt, &target_um))
+            CoordinateSystem::parseLinearToUm(txt, &target_um);
         int32_t target_machine_um = CoordinateSystem::xUserToMachineUm(target_um);
         CoordinateSystem::x_global_um[off] = CoordinateSystem::x_raw_um - CoordinateSystem::x_tool_um[tool] - target_machine_um;
     } else if (active_axis == AXIS_Z) {
         int32_t target_um = 0;
-        CoordinateSystem::parseLinearToUm(txt, &target_um);
+        if (!parse_linear_expression_to_um(txt, &target_um))
+            CoordinateSystem::parseLinearToUm(txt, &target_um);
         int32_t target_machine_um = CoordinateSystem::zUserToMachineUm(target_um);
         CoordinateSystem::z_global_um[off] = CoordinateSystem::z_raw_um - CoordinateSystem::z_tool_um[tool] - target_machine_um;
     } else {
         int32_t target_deg_x100 = 0;
-        CoordinateSystem::parseDegToDegX100(txt, &target_deg_x100);
+        if (!parse_deg_expression_to_degx100(txt, &target_deg_x100))
+            CoordinateSystem::parseDegToDegX100(txt, &target_deg_x100);
         int32_t target_ticks = CoordinateSystem::degX100ToTicks(target_deg_x100);
         int32_t raw = CoordinateSystem::wrap01599(EncoderProxy::getRawTicks());
         CoordinateSystem::c_global_ticks[off] = CoordinateSystem::wrap01599(raw - CoordinateSystem::c_tool_ticks[tool] - target_ticks);
@@ -584,20 +623,47 @@ void ModalManager::onNumpadKey(lv_event_t *e) {
 
     if (key == '.') {
         if (ta_select_all_pending) { lv_textarea_set_text(ta_value, "0."); clear_select_all(); return; }
-        if (strchr(cur, '.')) return;
         if (cur[0] == '\0') { lv_textarea_set_text(ta_value, "0."); return; }
         if (strcmp(cur, "-") == 0) { lv_textarea_set_text(ta_value, "-0."); return; }
+        size_t len = strlen(cur);
+        if (len > 0 && (cur[len - 1] == '+' || cur[len - 1] == '-')) {
+            lv_textarea_add_text(ta_value, "0.");
+            return;
+        }
+        const char *last_op = strrchr(cur, '+');
+        const char *last_minus = strrchr(cur, '-');
+        const char *last = last_op;
+        if (!last || (last_minus && last_minus > last)) last = last_minus;
+        const char *segment = last ? last + 1 : cur;
+        if (strchr(segment, '.')) return;
         lv_textarea_add_char(ta_value, '.');
         return;
     }
 
-    if (key == '-') {
-        if (ta_select_all_pending) { lv_textarea_set_text(ta_value, "-"); clear_select_all(); return; }
-        char buf[64];
-        if (cur[0] == '-') strncpy(buf, cur + 1, sizeof(buf) - 1);
-        else { buf[0] = '-'; strncpy(buf + 1, cur, sizeof(buf) - 2); }
-        buf[sizeof(buf) - 1] = '\0';
-        lv_textarea_set_text(ta_value, buf);
+    if (key == '+' || key == '-') {
+        if (ta_select_all_pending) {
+            if (key == '-') lv_textarea_set_text(ta_value, "-");
+            else lv_textarea_set_text(ta_value, "");
+            clear_select_all();
+            return;
+        }
+        size_t len = strlen(cur);
+        if (len == 0) {
+            if (key == '-') lv_textarea_set_text(ta_value, "-");
+            return;
+        }
+        char last = cur[len - 1];
+        if (last == '+' || last == '-') {
+            char buf[64];
+            strncpy(buf, cur, sizeof(buf) - 1);
+            buf[sizeof(buf) - 1] = '\0';
+            if (len < sizeof(buf)) {
+                buf[len - 1] = (char)key;
+                lv_textarea_set_text(ta_value, buf);
+            }
+            return;
+        }
+        lv_textarea_add_char(ta_value, (char)key);
     }
 }
 
@@ -606,7 +672,10 @@ void ModalManager::onSetGlobal(lv_event_t *e) { (void)e; applyGlobalOffset(); cl
 
 void ModalManager::applyPitch() {
     if (!ta_value) return;
-    float v = atof(lv_textarea_get_text(ta_value));
+    double v_expr = 0.0;
+    float v = parse_add_sub_expression(lv_textarea_get_text(ta_value), &v_expr)
+        ? (float)v_expr
+        : atof(lv_textarea_get_text(ta_value));
     if (v == 0.0f) return;
 
     int32_t pitch_um;
@@ -626,7 +695,8 @@ void ModalManager::applyEndstop() {
     if (!ta_value) return;
     const int tool = ToolManager::getCurrentTool();
     int32_t target_um = 0;
-    if (!CoordinateSystem::parseLinearToUm(lv_textarea_get_text(ta_value), &target_um))
+    if (!parse_linear_expression_to_um(lv_textarea_get_text(ta_value), &target_um)
+        && !CoordinateSystem::parseLinearToUm(lv_textarea_get_text(ta_value), &target_um))
         target_um = CoordinateSystem::getDisplayZ(tool);
 
     if (endstop_is_max) EndstopProxy::setMaxFromDisplayUm(target_um, tool);

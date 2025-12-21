@@ -457,7 +457,12 @@ lv_obj_t *UIManager::makeAxisRow(lv_obj_t *parent, const char *name,
     lv_obj_set_style_pad_right(lbl_val, 6, 0);
     lv_obj_set_grid_cell(lbl_val, LV_GRID_ALIGN_STRETCH, 2, 1, LV_GRID_ALIGN_CENTER, 0, 1);
     lv_obj_add_flag(lbl_val, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(lbl_val, zero_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_add_event_cb(lbl_val, zero_cb, LV_EVENT_SHORT_CLICKED, nullptr);
+    if (strcmp(name, "Z") == 0) {
+        lv_obj_add_event_cb(lbl_val, onLongPressZ, LV_EVENT_LONG_PRESSED, nullptr);
+    } else if (strcmp(name, "C") == 0) {
+        lv_obj_add_event_cb(lbl_val, onLongPressC, LV_EVENT_LONG_PRESSED, nullptr);
+    }
 
     if (out_value_label) *out_value_label = lbl_val;
 	if (out_name_label)
