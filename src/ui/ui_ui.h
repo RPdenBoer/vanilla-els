@@ -60,10 +60,12 @@ private:
     static bool endstop_max_long_pressed;
     static bool btn_left_down;
     static bool btn_right_down;
-    static bool btn_left_long_handled;
-    static bool btn_right_long_handled;
-    static uint32_t btn_left_down_ms;
+	static bool btn_left_long_handled;
+	static bool btn_right_long_handled;
+	static uint32_t btn_left_down_ms;
     static uint32_t btn_right_down_ms;
+	static bool endstop_min_hit;
+	static bool endstop_max_hit;
 
 	static void createUI();
     static void updateJogAvailability();

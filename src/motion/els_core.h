@@ -24,7 +24,7 @@ public:
     static void setDirectionMul(int8_t mul);
 
     // Sync helper (pause at target Z and wait for spindle index)
-    static void setSync(bool enabled, int32_t z_um);
+    static void setSync(bool enabled, int32_t z_um, int32_t c_ticks);
     static bool isSyncWaiting() { return sync_waiting; }
     static bool isSyncEnabled() { return sync_enabled; }
     static bool isSyncIn() { return sync_in; }
@@ -58,10 +58,12 @@ private:
     static bool sync_armed;
     static bool sync_in;
     static int32_t sync_z_um;
+    static int32_t sync_phase_ticks;
     static int32_t sync_tolerance_um;
     static int32_t sync_tolerance_out_um;
     static int32_t sync_ref_z_um;
     static int32_t sync_ref_spindle;
+	static int32_t last_z_um;
 
     static bool checkEndstops(int32_t z_um);
 };

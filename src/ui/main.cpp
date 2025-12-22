@@ -56,7 +56,7 @@ static void sendCommandsToMotionBoard() {
         EndstopProxy::isMinEnabled(),
         EndstopProxy::isMaxEnabled()
     );
-	SpiMaster::setSync(SyncProxy::getMachineUm(), SyncProxy::isEnabled());
+	SpiMaster::setSync(SyncProxy::getMachineUm(), SyncProxy::isEnabled(), SyncProxy::getPhaseTicks());
 }
 
 // ============================================================================

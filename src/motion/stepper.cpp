@@ -1,6 +1,7 @@
 #include "stepper.h"
 #include "config_motion.h"
 #include <Arduino.h>
+#include "esp32-hal-rmt.h"
 
 // Static member initialization
 int32_t Stepper::position = 0;
@@ -18,10 +19,14 @@ bool Stepper::init() {
         digitalWrite(ELS_EN_PIN, ELS_EN_ACTIVE_LOW ? HIGH : LOW);  // Disabled
     }
     
-    // For now, just use GPIO bit-bang (RMT can be added later for better timing)
-    rmt_ready = false;
-    
-    Serial.println("[Stepper] GPIO mode initialized");
+    rmt_ready = rmtInit(ELS_STEP_PIN, RMT_TX_MODE, RMT_MEM_NUM_BLOCKS_1, ELS_RMT_RES_HZ);
+    if (!rmt_ready) {
+        Serial.println("[Stepper] RMT init failed");
+        return false;
+    }
+    rmtSetEOT(ELS_STEP_PIN, 0);
+
+    Serial.println("[Stepper] RMT mode initialized");
     return true;
 }
 
@@ -47,13 +52,29 @@ void Stepper::step(int32_t count) {
     if (steps > ELS_MAX_STEPS_PER_CYCLE) {
         steps = ELS_MAX_STEPS_PER_CYCLE;
     }
-    
-    // GPIO bit-bang step generation
-    for (int32_t i = 0; i < steps; i++) {
-        digitalWrite(ELS_STEP_PIN, HIGH);
-        delayMicroseconds(ELS_PULSE_US);
-        digitalWrite(ELS_STEP_PIN, LOW);
-        delayMicroseconds(ELS_PULSE_US);
+
+    if (!rmt_ready) return;
+
+    static rmt_data_t rmt_buf[ELS_RMT_CHUNK_STEPS];
+    static bool rmt_buf_init = false;
+    if (!rmt_buf_init) {
+        rmt_data_t pulse = {};
+        pulse.level0 = 1;
+        pulse.duration0 = ELS_PULSE_US;
+        pulse.level1 = 0;
+        pulse.duration1 = ELS_PULSE_US;
+        for (int32_t i = 0; i < ELS_RMT_CHUNK_STEPS; i++) {
+            rmt_buf[i] = pulse;
+        }
+        rmt_buf_init = true;
+    }
+
+    int32_t remaining = steps;
+    while (remaining > 0) {
+        int32_t chunk = remaining;
+        if (chunk > ELS_RMT_CHUNK_STEPS) chunk = ELS_RMT_CHUNK_STEPS;
+        (void)rmtWrite(ELS_STEP_PIN, rmt_buf, (size_t)chunk, RMT_WAIT_FOR_EVER);
+        remaining -= chunk;
     }
     
     // Update position

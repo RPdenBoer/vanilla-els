@@ -33,7 +33,7 @@ public:
     static void setPitchUm(int32_t pitch_um);
     static void setDirectionMul(int8_t mul);
     static void setEndstops(int32_t min_um, int32_t max_um, bool min_en, bool max_en);
-    static void setSync(int32_t z_um, bool enabled);
+    static void setSync(int32_t z_um, bool enabled, uint16_t c_ticks);
 	static void setMpgMode(MpgModeProto mode);
 	static MpgModeProto getMpgMode() { return mpg_mode; }
 
@@ -52,6 +52,7 @@ private:
     static bool endstop_min_enabled;
     static bool endstop_max_enabled;
     static int32_t sync_z_um;
+    static uint16_t sync_c_ticks;
     static bool sync_enabled;
 	static MpgModeProto mpg_mode;
 };

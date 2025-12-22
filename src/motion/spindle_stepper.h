@@ -51,15 +51,18 @@ private:
     static bool running;
     
     static uint32_t last_update_us;
-    static uint32_t step_interval_us;   // Microseconds between steps
-    static uint32_t last_step_us;
+    static uint32_t last_dt_us;
+    static uint32_t step_period_us;   // Microseconds per step
+    static int32_t steps_per_sec;
+    static int64_t step_accumulator_fp;
+    static bool rmt_ready;
     
     // Read analog potentiometer and direction switch
     static void readControls();
     
     // Apply acceleration limiting
     static void updateSpeed();
-    
-    // Hardware timer handle
-    static void* timer_handle;
+
+    static void updateRmtLoop();
+    static void accumulatePosition();
 };

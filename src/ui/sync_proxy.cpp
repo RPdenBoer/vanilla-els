@@ -41,6 +41,15 @@ int32_t SyncProxy::getDisplayUm(int tool_index) {
     return CoordinateSystem::zMachineToUserUm(machine_um);
 }
 
+uint16_t SyncProxy::getPhaseTicks() {
+    const int tool = ToolManager::getCurrentTool();
+    int off = OffsetManager::getCurrentOffset();
+    if (off < 0 || off >= OFFSET_COUNT) off = 0;
+
+    int32_t raw = CoordinateSystem::c_global_ticks[off] + CoordinateSystem::c_tool_ticks[tool];
+    return (uint16_t)CoordinateSystem::wrap01599(raw);
+}
+
 void SyncProxy::setEnabled(bool en) {
     if (en && !has_value) {
         setFromCurrentZ();

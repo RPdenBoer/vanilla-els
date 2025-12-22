@@ -11,7 +11,7 @@
 static constexpr size_t PROTOCOL_PACKET_SIZE = 32;
 
 // Protocol version for compatibility checking
-static constexpr uint8_t PROTOCOL_VERSION = 4;
+static constexpr uint8_t PROTOCOL_VERSION = 5;
 
 // ============================================================================
 // MPG Mode (Manual Pulse Generator routing)
@@ -83,8 +83,9 @@ struct __attribute__((packed)) CommandPacket {
 	MpgModeProto mpg_mode;		  // MPG routing mode        [1]
 
 	int32_t sync_z_um;			  // Sync target Z (machine) [4]
+	uint16_t sync_c_ticks;		  // Sync target C ticks     [2]
 	uint8_t sync_enabled;		  // Sync enabled flag       [1]
-	uint8_t reserved[6];		  // Padding                 [6]
+	uint8_t reserved[4];		  // Padding                 [4]
 	uint8_t sequence;             // Packet sequence number  [1]
     uint8_t checksum;             // XOR checksum            [1]
 };                                // Total: 32 bytes

@@ -250,7 +250,7 @@ void loop() {
         ElsCore::setEnabled(els_en);
         ElsCore::setPitchUm(cmd.pitch_um);
         ElsCore::setDirectionMul(cmd.direction_mul);
-		ElsCore::setSync(cmd.sync_enabled != 0, cmd.sync_z_um);
+		ElsCore::setSync(cmd.sync_enabled != 0, cmd.sync_z_um, cmd.sync_c_ticks);
         ElsCore::setEndstops(
             cmd.endstop_min_um, 
             cmd.endstop_max_um,
