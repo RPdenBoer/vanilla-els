@@ -49,24 +49,17 @@ void LeadscrewProxy::formatPitchLabel(char *out, size_t n) {
         // Display as TPI
         const float abs_pitch = (float)abs(pitch_um);
         float tpi = 25400.0f / abs_pitch;
-        // Prefer integer if close
-        float nearest = roundf(tpi);
-        if (fabsf(tpi - nearest) < 0.01f) {
-            if (pitch_um < 0) snprintf(out, n, "-%.0f", nearest);
-            else              snprintf(out, n, "%.0f", nearest);
-        } else {
-            if (pitch_um < 0) snprintf(out, n, "-%.2f", tpi);
-            else              snprintf(out, n, "%.2f", tpi);
-        }
+        if (pitch_um < 0) snprintf(out, n, "-%.4f", tpi);
+        else              snprintf(out, n, "%.4f", tpi);
         return;
     }
 
     // Display as pitch length (unitless): mm/rev in MM mode, inches/rev in INCH mode.
     if (CoordinateSystem::isLinearInchMode()) {
         const float inches = (float)pitch_um / 25400.0f;
-        snprintf(out, n, "%.3f", inches);
+        snprintf(out, n, "%.4f", inches);
     } else {
         const float mm = (float)pitch_um / 1000.0f;
-        snprintf(out, n, "%.2f", mm);
+        snprintf(out, n, "%.3f", mm);
     }
 }

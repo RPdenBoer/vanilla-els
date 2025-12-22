@@ -6,15 +6,15 @@
 #include <Arduino.h>
 
 // Static member definitions
-int32_t EndstopProxy::min_z_um = INT32_MIN;
-int32_t EndstopProxy::max_z_um = INT32_MAX;
+int32_t EndstopProxy::min_z_um = 0;          // Default 0mm
+int32_t EndstopProxy::max_z_um = 100000;     // Default 100mm
 bool EndstopProxy::endstops_configured = false;
 bool EndstopProxy::min_enabled = false;
 bool EndstopProxy::max_enabled = false;
 
 void EndstopProxy::init() {
-    min_z_um = INT32_MIN;
-    max_z_um = INT32_MAX;
+    // Keep current values - they have sensible defaults
+    // min_z_um and max_z_um already have defaults (0mm and 100mm)
     endstops_configured = false;
     min_enabled = false;
     max_enabled = false;
@@ -145,19 +145,16 @@ void EndstopProxy::setMinEnabled(bool en) {
 }
 
 void EndstopProxy::setMaxEnabled(bool en) {
-    if (en && max_z_um == INT32_MAX) return;
     max_enabled = en;
     endstops_configured = (min_enabled || max_enabled);
 }
 
 void EndstopProxy::toggleMinEnabled() {
-    if (min_z_um == INT32_MIN) return;
     min_enabled = !min_enabled;
     endstops_configured = (min_enabled || max_enabled);
 }
 
 void EndstopProxy::toggleMaxEnabled() {
-    if (max_z_um == INT32_MAX) return;
     max_enabled = !max_enabled;
     endstops_configured = (min_enabled || max_enabled);
 }

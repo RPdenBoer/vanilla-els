@@ -2,6 +2,7 @@
 #include "offsets_ui.h"
 
 #include <Arduino.h>
+#include <Preferences.h>
 #include <cstring>
 
 // Static member definitions
@@ -72,21 +73,16 @@ void CoordinateSystem::formatMm(char *out, size_t n, int32_t um) {
     int32_t sign = (um < 0) ? -1 : 1;
     int32_t a = (um < 0) ? -um : um;
     int32_t mm_i = (a / 1000);
-    int32_t mm_f = ((a % 1000) + 5) / 10; // round to 2 decimals
-    if (mm_f >= 100) {
-        mm_i++;
-        mm_f = 0;
-    } // handle rounding overflow
+    int32_t mm_f = (a % 1000);
     if (sign < 0)
-        snprintf(out, n, "-%ld.%02ld", (long)mm_i, (long)mm_f);
+        snprintf(out, n, "-%ld.%03ld", (long)mm_i, (long)mm_f);
     else
-        snprintf(out, n, "%ld.%02ld", (long)mm_i, (long)mm_f);
+        snprintf(out, n, "%ld.%03ld", (long)mm_i, (long)mm_f);
 }
 
 void CoordinateSystem::formatDeg(char *out, size_t n, int32_t deg_x100) {
-    int32_t d_i = deg_x100 / 100;
-    int32_t d_f = deg_x100 % 100;
-    snprintf(out, n, "%ld.%02ld", (long)d_i, (long)d_f);
+    float deg = (float)deg_x100 / 100.0f;
+    snprintf(out, n, "%.3f", deg);
 }
 
 bool CoordinateSystem::parseMmToUm(const char *s, int32_t *out_um) {
@@ -128,8 +124,8 @@ void CoordinateSystem::formatLinear(char *out, size_t n, int32_t um) {
 
     // Inches: 1 inch = 25.4mm = 25400um
     float inches = (float)um / 25400.0f;
-    // 3 decimals is a reasonable DRO-style resolution for inches
-    snprintf(out, n, "%.3f", inches);
+    // 4 decimals is a reasonable DRO-style resolution for inches
+    snprintf(out, n, "%.4f", inches);
 }
 
 bool CoordinateSystem::parseLinearToUm(const char *s, int32_t *out_um) {
@@ -142,4 +138,40 @@ bool CoordinateSystem::parseLinearToUm(const char *s, int32_t *out_um) {
 
     *out_um = (int32_t)lroundf(v * 25400.0f);
     return true;
+}
+
+struct ToolOffsetsBlob {
+    uint32_t magic;
+    int32_t x[TOOL_COUNT];
+    int32_t z[TOOL_COUNT];
+    int32_t c[TOOL_COUNT];
+};
+
+static constexpr uint32_t TOOL_OFFSETS_MAGIC = 0x544F4F4C; // "TOOL"
+static const char *TOOL_OFFSETS_NS = "tool_offsets";
+static const char *TOOL_OFFSETS_KEY = "v1";
+
+bool CoordinateSystem::loadToolOffsets() {
+    Preferences prefs;
+    if (!prefs.begin(TOOL_OFFSETS_NS, true)) return false;
+    ToolOffsetsBlob blob = {};
+    size_t len = prefs.getBytes(TOOL_OFFSETS_KEY, &blob, sizeof(blob));
+    prefs.end();
+    if (len != sizeof(blob) || blob.magic != TOOL_OFFSETS_MAGIC) return false;
+    memcpy(x_tool_um, blob.x, sizeof(blob.x));
+    memcpy(z_tool_um, blob.z, sizeof(blob.z));
+    memcpy(c_tool_ticks, blob.c, sizeof(blob.c));
+    return true;
+}
+
+void CoordinateSystem::saveToolOffsets() {
+    Preferences prefs;
+    if (!prefs.begin(TOOL_OFFSETS_NS, false)) return;
+    ToolOffsetsBlob blob = {};
+    blob.magic = TOOL_OFFSETS_MAGIC;
+    memcpy(blob.x, x_tool_um, sizeof(blob.x));
+    memcpy(blob.z, z_tool_um, sizeof(blob.z));
+    memcpy(blob.c, c_tool_ticks, sizeof(blob.c));
+    prefs.putBytes(TOOL_OFFSETS_KEY, &blob, sizeof(blob));
+    prefs.end();
 }

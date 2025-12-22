@@ -32,6 +32,11 @@ static void apply_button_common_style(lv_obj_t *btn) {
     lv_obj_set_style_transition(btn, &NO_TRANSITION, LV_PART_MAIN | LV_STATE_PRESSED);
 }
 
+static lv_color_t endstop_active_color()
+{
+	return lv_color_mix(lv_palette_main(LV_PALETTE_GREY), lv_palette_main(LV_PALETTE_RED), 180);
+}
+
 lv_obj_t *UIManager::lbl_x = nullptr;
 lv_obj_t *UIManager::lbl_z = nullptr;
 lv_obj_t *UIManager::lbl_c = nullptr;
@@ -51,10 +56,33 @@ lv_obj_t *UIManager::btn_endstop_max_ptr = nullptr;
 bool UIManager::els_latched = false;
 bool UIManager::endstop_min_long_pressed = false;
 bool UIManager::endstop_max_long_pressed = false;
-bool UIManager::btn_left_last = true;  // HIGH (not pressed) initially
-bool UIManager::btn_right_last = true; // HIGH (not pressed) initially
+bool UIManager::btn_left_down = false;
+bool UIManager::btn_right_down = false;
+bool UIManager::btn_left_long_handled = false;
+bool UIManager::btn_right_long_handled = false;
+uint32_t UIManager::btn_left_down_ms = 0;
+uint32_t UIManager::btn_right_down_ms = 0;
+
+static constexpr uint32_t ELS_LONG_PRESS_MS = 800;
 
 void UIManager::updateJogAvailability() {
+	if (!btn_jog_l || !btn_jog_r)
+		return;
+	const bool els_locked = (!els_latched && SpiMaster::getMpgMode() == MpgModeProto::JOG_Z);
+	if (els_locked)
+	{
+		const lv_color_t locked = lv_palette_darken(LV_PALETTE_GREY, 3);
+		lv_obj_clear_state(btn_jog_l, LV_STATE_CHECKED);
+		lv_obj_clear_state(btn_jog_r, LV_STATE_CHECKED);
+		lv_obj_set_style_bg_color(btn_jog_l, locked, LV_PART_MAIN);
+		lv_obj_set_style_border_color(btn_jog_l, locked, LV_PART_MAIN);
+		lv_obj_set_style_text_color(btn_jog_l, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+		lv_obj_set_style_bg_color(btn_jog_r, locked, LV_PART_MAIN);
+		lv_obj_set_style_border_color(btn_jog_r, locked, LV_PART_MAIN);
+		lv_obj_set_style_text_color(btn_jog_r, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+		return;
+	}
+
 	// When ELS is active on one button, show other as blue-grey (still clickable for e-stop)
 	const bool l_checked = lv_obj_has_state(btn_jog_l, LV_STATE_CHECKED);
 	const bool r_checked = lv_obj_has_state(btn_jog_r, LV_STATE_CHECKED);
@@ -111,9 +139,15 @@ void UIManager::createUI() {
     lv_obj_set_style_border_width(main_row, 0, 0);
     lv_obj_set_style_pad_all(main_row, 0, 0);
 
-    static int32_t main_col_dsc[] = {LV_GRID_FR(1), 188, LV_GRID_TEMPLATE_LAST};
-    static int32_t main_row_dsc[] = {LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
-    lv_obj_set_layout(main_row, LV_LAYOUT_GRID);
+	const int scr_pad = 4;
+	const int tool_row_pad = 2;
+	const int tool_gap = 4;
+	const int tool_btn_w = (SCREEN_W - (2 * scr_pad) - (2 * tool_row_pad) - (tool_gap * (TOOL_COUNT - 1))) / TOOL_COUNT;
+	const int feature_w = (tool_btn_w * OFFSET_COUNT) + (tool_gap * (OFFSET_COUNT - 1)) + tool_row_pad;
+	static int32_t main_col_dsc[] = {LV_GRID_FR(1), 0, LV_GRID_TEMPLATE_LAST};
+	main_col_dsc[1] = feature_w;
+	static int32_t main_row_dsc[] = {LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
+	lv_obj_set_layout(main_row, LV_LAYOUT_GRID);
     lv_obj_set_grid_dsc_array(main_row, main_col_dsc, main_row_dsc);
     lv_obj_set_style_pad_column(main_row, 10, 0);
 
@@ -136,15 +170,16 @@ void UIManager::createUI() {
     lv_obj_set_style_bg_opa(feature_col, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(feature_col, 0, 0);
     lv_obj_set_style_pad_all(feature_col, 0, 0);
-    lv_obj_set_flex_flow(feature_col, LV_FLEX_FLOW_COLUMN);
+	lv_obj_set_style_pad_right(feature_col, tool_row_pad, 0);
+	lv_obj_set_flex_flow(feature_col, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_gap(feature_col, 6, 0);
 
     // Work offset selector (G1/G2/G3)
     lv_obj_t *offset_row = lv_obj_create(feature_col);
     lv_obj_set_width(offset_row, LV_PCT(100));
-    lv_obj_set_height(offset_row, 48);
-    lv_obj_clear_flag(offset_row, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_bg_opa(offset_row, LV_OPA_TRANSP, 0);
+	lv_obj_set_height(offset_row, 44);
+	lv_obj_clear_flag(offset_row, LV_OBJ_FLAG_SCROLLABLE);
+	lv_obj_set_style_bg_opa(offset_row, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(offset_row, 0, 0);
     lv_obj_set_style_pad_all(offset_row, 0, 0);
     lv_obj_set_style_pad_gap(offset_row, 4, 0);
@@ -213,9 +248,9 @@ void UIManager::createUI() {
     lv_label_set_text(lbl_pitch_mode, LeadscrewProxy::isPitchTpiMode() ? "TPI" : "PITCH");
     lv_obj_center(lbl_pitch_mode);
 
-    // Pitch row with endstop buttons
-    lv_obj_t *pitch_row = lv_obj_create(feature_col);
-    lv_obj_set_width(pitch_row, LV_PCT(100));
+	// Pitch row
+	lv_obj_t *pitch_row = lv_obj_create(feature_col);
+	lv_obj_set_width(pitch_row, LV_PCT(100));
     lv_obj_set_height(pitch_row, 52);
     lv_obj_clear_flag(pitch_row, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_bg_opa(pitch_row, LV_OPA_TRANSP, 0);
@@ -224,28 +259,8 @@ void UIManager::createUI() {
     lv_obj_set_style_pad_gap(pitch_row, 4, 0);
     lv_obj_set_flex_flow(pitch_row, LV_FLEX_FLOW_ROW);
 
-    // Min endstop button
-    btn_endstop_min_ptr = lv_btn_create(pitch_row);
-    lv_obj_set_width(btn_endstop_min_ptr, 32);
-    lv_obj_set_height(btn_endstop_min_ptr, LV_PCT(100));
-    lv_obj_clear_flag(btn_endstop_min_ptr, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_event_cb(btn_endstop_min_ptr, onEditEndstopMin, LV_EVENT_SHORT_CLICKED, nullptr);
-    lv_obj_add_event_cb(btn_endstop_min_ptr, onLongPressEndstopMin, LV_EVENT_LONG_PRESSED, nullptr);
-    lv_obj_set_style_bg_opa(btn_endstop_min_ptr, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_style_border_width(btn_endstop_min_ptr, 1, LV_PART_MAIN);
-    lv_obj_set_style_border_color(btn_endstop_min_ptr, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
-    lv_obj_set_style_text_color(btn_endstop_min_ptr, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(btn_endstop_min_ptr, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_CHECKED);
-    lv_obj_set_style_bg_color(btn_endstop_min_ptr, lv_palette_darken(LV_PALETTE_RED, 2), LV_PART_MAIN | LV_STATE_CHECKED);
-    lv_obj_set_style_border_color(btn_endstop_min_ptr, lv_palette_darken(LV_PALETTE_RED, 2), LV_PART_MAIN | LV_STATE_CHECKED);
-    lv_obj_set_style_text_color(btn_endstop_min_ptr, lv_color_white(), LV_PART_MAIN | LV_STATE_CHECKED);
-    apply_button_common_style(btn_endstop_min_ptr);
-    lv_obj_t *lbl_emin = lv_label_create(btn_endstop_min_ptr);
-    lv_label_set_text(lbl_emin, "[");
-    lv_obj_center(lbl_emin);
-
-    // Pitch value button
-    lv_obj_t *btn_pitch = lv_btn_create(pitch_row);
+	// Pitch value button
+	lv_obj_t *btn_pitch = lv_btn_create(pitch_row);
     lv_obj_set_height(btn_pitch, LV_PCT(100));
     lv_obj_set_flex_grow(btn_pitch, 1);
     lv_obj_clear_flag(btn_pitch, LV_OBJ_FLAG_SCROLLABLE);
@@ -261,36 +276,37 @@ void UIManager::createUI() {
     lv_label_set_text(lbl_pitch, pbuf);
     lv_obj_center(lbl_pitch);
 
-    // Max endstop button
-    btn_endstop_max_ptr = lv_btn_create(pitch_row);
-    lv_obj_set_width(btn_endstop_max_ptr, 32);
-    lv_obj_set_height(btn_endstop_max_ptr, LV_PCT(100));
-    lv_obj_clear_flag(btn_endstop_max_ptr, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_event_cb(btn_endstop_max_ptr, onEditEndstopMax, LV_EVENT_SHORT_CLICKED, nullptr);
-    lv_obj_add_event_cb(btn_endstop_max_ptr, onLongPressEndstopMax, LV_EVENT_LONG_PRESSED, nullptr);
-    lv_obj_set_style_bg_opa(btn_endstop_max_ptr, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_style_border_width(btn_endstop_max_ptr, 1, LV_PART_MAIN);
-    lv_obj_set_style_border_color(btn_endstop_max_ptr, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
-    lv_obj_set_style_text_color(btn_endstop_max_ptr, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(btn_endstop_max_ptr, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_CHECKED);
-    lv_obj_set_style_bg_color(btn_endstop_max_ptr, lv_palette_darken(LV_PALETTE_RED, 2), LV_PART_MAIN | LV_STATE_CHECKED);
-    lv_obj_set_style_border_color(btn_endstop_max_ptr, lv_palette_darken(LV_PALETTE_RED, 2), LV_PART_MAIN | LV_STATE_CHECKED);
-    lv_obj_set_style_text_color(btn_endstop_max_ptr, lv_color_white(), LV_PART_MAIN | LV_STATE_CHECKED);
-    apply_button_common_style(btn_endstop_max_ptr);
-    lv_obj_t *lbl_emax = lv_label_create(btn_endstop_max_ptr);
-    lv_label_set_text(lbl_emax, "]");
-    lv_obj_center(lbl_emax);
+	// Endstop row
+	lv_obj_t *els_row = lv_obj_create(feature_col);
+	lv_obj_set_width(els_row, LV_PCT(100));
+	lv_obj_set_flex_grow(els_row, 1);
+	lv_obj_clear_flag(els_row, LV_OBJ_FLAG_SCROLLABLE);
+	lv_obj_set_style_bg_opa(els_row, LV_OPA_TRANSP, 0);
+	lv_obj_set_style_border_width(els_row, 0, 0);
+	lv_obj_set_style_pad_all(els_row, 0, 0);
+	lv_obj_set_style_pad_gap(els_row, 4, 0);
+	lv_obj_set_flex_flow(els_row, LV_FLEX_FLOW_ROW);
 
-    // ELS row
-    lv_obj_t *els_row = lv_obj_create(feature_col);
-    lv_obj_set_width(els_row, LV_PCT(100));
-    lv_obj_set_flex_grow(els_row, 1);
-    lv_obj_clear_flag(els_row, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_bg_opa(els_row, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(els_row, 0, 0);
-    lv_obj_set_style_pad_all(els_row, 0, 0);
-    lv_obj_set_style_pad_gap(els_row, 4, 0);
-    lv_obj_set_flex_flow(els_row, LV_FLEX_FLOW_ROW);
+	// Z left endstop button
+	btn_endstop_min_ptr = lv_btn_create(els_row);
+	lv_obj_set_height(btn_endstop_min_ptr, LV_PCT(100));
+	lv_obj_set_flex_grow(btn_endstop_min_ptr, 1);
+	lv_obj_clear_flag(btn_endstop_min_ptr, LV_OBJ_FLAG_SCROLLABLE);
+	lv_obj_add_event_cb(btn_endstop_min_ptr, onEditEndstopMin, LV_EVENT_SHORT_CLICKED, nullptr);
+	lv_obj_add_event_cb(btn_endstop_min_ptr, onLongPressEndstopMin, LV_EVENT_LONG_PRESSED, nullptr);
+	lv_obj_set_style_bg_opa(btn_endstop_min_ptr, LV_OPA_TRANSP, LV_PART_MAIN);
+	lv_obj_set_style_border_width(btn_endstop_min_ptr, 1, LV_PART_MAIN);
+	lv_obj_set_style_border_color(btn_endstop_min_ptr, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+	lv_obj_set_style_text_color(btn_endstop_min_ptr, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+	lv_obj_set_style_bg_opa(btn_endstop_min_ptr, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_CHECKED);
+	lv_obj_set_style_bg_color(btn_endstop_min_ptr, endstop_active_color(), LV_PART_MAIN | LV_STATE_CHECKED);
+	lv_obj_set_style_border_color(btn_endstop_min_ptr, endstop_active_color(), LV_PART_MAIN | LV_STATE_CHECKED);
+	lv_obj_set_style_text_color(btn_endstop_min_ptr, lv_color_white(), LV_PART_MAIN | LV_STATE_CHECKED);
+	apply_button_common_style(btn_endstop_min_ptr);
+	lv_obj_t *lbl_emin = lv_label_create(btn_endstop_min_ptr);
+	lv_label_set_text(lbl_emin, "|<");
+	lv_obj_set_style_text_font(lbl_emin, &lv_font_montserrat_20, 0);
+	lv_obj_center(lbl_emin);
 
 	// Left ELS button (positive direction)
 	btn_jog_l = lv_btn_create(els_row);
@@ -305,12 +321,13 @@ void UIManager::createUI() {
 	lv_obj_set_style_border_color(btn_jog_l, lv_palette_darken(LV_PALETTE_GREEN, 2), LV_PART_MAIN);
 	lv_obj_set_style_text_color(btn_jog_l, lv_color_white(), LV_PART_MAIN);
 	lv_obj_set_style_bg_opa(btn_jog_l, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_CHECKED);
-	lv_obj_set_style_bg_color(btn_jog_l, lv_palette_darken(LV_PALETTE_RED, 2), LV_PART_MAIN | LV_STATE_CHECKED);
-	lv_obj_set_style_border_color(btn_jog_l, lv_palette_darken(LV_PALETTE_RED, 2), LV_PART_MAIN | LV_STATE_CHECKED);
+	lv_obj_set_style_bg_color(btn_jog_l, lv_palette_darken(LV_PALETTE_RED, 1), LV_PART_MAIN | LV_STATE_CHECKED);
+	lv_obj_set_style_border_color(btn_jog_l, lv_palette_darken(LV_PALETTE_RED, 1), LV_PART_MAIN | LV_STATE_CHECKED);
 	apply_button_common_style(btn_jog_l);
-    lv_obj_t *lbll = lv_label_create(btn_jog_l);
-	lv_label_set_text(lbll, "<ELS");
-	lv_obj_center(lbll);
+	lv_obj_t *lbl_els_l = lv_label_create(btn_jog_l);
+	lv_label_set_text(lbl_els_l, "<");
+	lv_obj_set_style_text_font(lbl_els_l, &lv_font_montserrat_20, 0);
+	lv_obj_center(lbl_els_l);
 
 	// Right ELS button (negative direction)
 	btn_jog_r = lv_btn_create(els_row);
@@ -325,14 +342,36 @@ void UIManager::createUI() {
 	lv_obj_set_style_border_color(btn_jog_r, lv_palette_darken(LV_PALETTE_GREEN, 2), LV_PART_MAIN);
 	lv_obj_set_style_text_color(btn_jog_r, lv_color_white(), LV_PART_MAIN);
 	lv_obj_set_style_bg_opa(btn_jog_r, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_CHECKED);
-	lv_obj_set_style_bg_color(btn_jog_r, lv_palette_darken(LV_PALETTE_RED, 2), LV_PART_MAIN | LV_STATE_CHECKED);
-	lv_obj_set_style_border_color(btn_jog_r, lv_palette_darken(LV_PALETTE_RED, 2), LV_PART_MAIN | LV_STATE_CHECKED);
+	lv_obj_set_style_bg_color(btn_jog_r, lv_palette_darken(LV_PALETTE_RED, 1), LV_PART_MAIN | LV_STATE_CHECKED);
+	lv_obj_set_style_border_color(btn_jog_r, lv_palette_darken(LV_PALETTE_RED, 1), LV_PART_MAIN | LV_STATE_CHECKED);
 	apply_button_common_style(btn_jog_r);
-    lv_obj_t *lblr = lv_label_create(btn_jog_r);
-	lv_label_set_text(lblr, "ELS>");
-	lv_obj_center(lblr);
+	lv_obj_t *lbl_els_r = lv_label_create(btn_jog_r);
+	lv_label_set_text(lbl_els_r, ">");
+	lv_obj_set_style_text_font(lbl_els_r, &lv_font_montserrat_20, 0);
+	lv_obj_center(lbl_els_r);
 
-    // Axis rows
+	// Z right endstop button
+	btn_endstop_max_ptr = lv_btn_create(els_row);
+	lv_obj_set_height(btn_endstop_max_ptr, LV_PCT(100));
+	lv_obj_set_flex_grow(btn_endstop_max_ptr, 1);
+	lv_obj_clear_flag(btn_endstop_max_ptr, LV_OBJ_FLAG_SCROLLABLE);
+	lv_obj_add_event_cb(btn_endstop_max_ptr, onEditEndstopMax, LV_EVENT_SHORT_CLICKED, nullptr);
+	lv_obj_add_event_cb(btn_endstop_max_ptr, onLongPressEndstopMax, LV_EVENT_LONG_PRESSED, nullptr);
+	lv_obj_set_style_bg_opa(btn_endstop_max_ptr, LV_OPA_TRANSP, LV_PART_MAIN);
+	lv_obj_set_style_border_width(btn_endstop_max_ptr, 1, LV_PART_MAIN);
+	lv_obj_set_style_border_color(btn_endstop_max_ptr, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+	lv_obj_set_style_text_color(btn_endstop_max_ptr, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+	lv_obj_set_style_bg_opa(btn_endstop_max_ptr, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_CHECKED);
+	lv_obj_set_style_bg_color(btn_endstop_max_ptr, endstop_active_color(), LV_PART_MAIN | LV_STATE_CHECKED);
+	lv_obj_set_style_border_color(btn_endstop_max_ptr, endstop_active_color(), LV_PART_MAIN | LV_STATE_CHECKED);
+	lv_obj_set_style_text_color(btn_endstop_max_ptr, lv_color_white(), LV_PART_MAIN | LV_STATE_CHECKED);
+	apply_button_common_style(btn_endstop_max_ptr);
+	lv_obj_t *lbl_emax = lv_label_create(btn_endstop_max_ptr);
+	lv_label_set_text(lbl_emax, ">|");
+	lv_obj_set_style_text_font(lbl_emax, &lv_font_montserrat_20, 0);
+	lv_obj_center(lbl_emax);
+
+	// Axis rows
 	lv_obj_t *row_x = makeAxisRow(dro_col, "X", &lbl_x, onZeroX, &lbl_x_name);
 	lv_obj_t *row_z = makeAxisRow(dro_col, "Z", &lbl_z, onZeroZ, &lbl_z_name);
 	lv_obj_t *row_c = makeAxisRow(dro_col, "C", &lbl_c, onZeroC, &lbl_c_name);
@@ -597,6 +636,13 @@ void UIManager::onToggleEls(lv_event_t *e) {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
 	lv_obj_t *btn = (lv_obj_t *)lv_event_get_target(e);
 	const int dir = (int)(intptr_t)lv_event_get_user_data(e);
+	if (!els_latched && SpiMaster::getMpgMode() == MpgModeProto::JOG_Z)
+	{
+		lv_obj_clear_state(btn_jog_l, LV_STATE_CHECKED);
+		lv_obj_clear_state(btn_jog_r, LV_STATE_CHECKED);
+		updateJogAvailability();
+		return;
+	}
 
 	// If ELS is currently running, pressing either button turns it off (e-stop)
 	if (els_latched)
@@ -689,6 +735,10 @@ void UIManager::onLongPressZ(lv_event_t *e)
 	// Toggle between RPM_CONTROL and JOG_Z mode
 	MpgModeProto currentMode = SpiMaster::getMpgMode();
 	MpgModeProto newMode = (currentMode == MpgModeProto::JOG_Z) ? MpgModeProto::RPM_CONTROL : MpgModeProto::JOG_Z;
+	if (newMode == MpgModeProto::JOG_Z)
+	{
+		forceElsOff();
+	}
 	SpiMaster::setMpgMode(newMode);
 	Serial.printf("[UI] MPG mode -> %s\n", newMode == MpgModeProto::JOG_Z ? "JOG_Z" : "RPM");
 }
@@ -742,32 +792,70 @@ void UIManager::initPhysicalButtons()
 {
 	pinMode(ELS_BTN_LEFT_PIN, INPUT_PULLUP);
 	pinMode(ELS_BTN_RIGHT_PIN, INPUT_PULLUP);
-	btn_left_last = digitalRead(ELS_BTN_LEFT_PIN);
-	btn_right_last = digitalRead(ELS_BTN_RIGHT_PIN);
+	btn_left_down = false;
+	btn_right_down = false;
+	btn_left_long_handled = false;
+	btn_right_long_handled = false;
+	btn_left_down_ms = 0;
+	btn_right_down_ms = 0;
 	Serial.printf("[UI] Physical buttons init: L=%d, R=%d\\n", ELS_BTN_LEFT_PIN, ELS_BTN_RIGHT_PIN);
 }
 
 void UIManager::pollPhysicalButtons()
 {
-	bool btn_left = digitalRead(ELS_BTN_LEFT_PIN);
-	bool btn_right = digitalRead(ELS_BTN_RIGHT_PIN);
+	const uint32_t now = millis();
+	const bool btn_left = (digitalRead(ELS_BTN_LEFT_PIN) == LOW);
+	const bool btn_right = (digitalRead(ELS_BTN_RIGHT_PIN) == LOW);
 
-	// Detect falling edge (button press, active LOW)
-	if (btn_left_last && !btn_left)
+	if (btn_left && !btn_left_down)
 	{
+		btn_left_down = true;
+		btn_left_down_ms = now;
+		btn_left_long_handled = false;
+	}
+	if (btn_left_down && !btn_left && !btn_left_long_handled)
+	{
+		btn_left_down = false;
 		triggerElsLeft();
 	}
-	if (btn_right_last && !btn_right)
+	else if (btn_left_down && !btn_left)
 	{
-		triggerElsRight();
+		btn_left_down = false;
+	}
+	if (btn_left_down && !btn_left_long_handled && (now - btn_left_down_ms >= ELS_LONG_PRESS_MS))
+	{
+		EndstopProxy::setMinFromCurrentZ();
+		updateEndstopButtonStates();
+		btn_left_long_handled = true;
 	}
 
-	btn_left_last = btn_left;
-	btn_right_last = btn_right;
+	if (btn_right && !btn_right_down)
+	{
+		btn_right_down = true;
+		btn_right_down_ms = now;
+		btn_right_long_handled = false;
+	}
+	if (btn_right_down && !btn_right && !btn_right_long_handled)
+	{
+		btn_right_down = false;
+		triggerElsRight();
+	}
+	else if (btn_right_down && !btn_right)
+	{
+		btn_right_down = false;
+	}
+	if (btn_right_down && !btn_right_long_handled && (now - btn_right_down_ms >= ELS_LONG_PRESS_MS))
+	{
+		EndstopProxy::setMaxFromCurrentZ();
+		updateEndstopButtonStates();
+		btn_right_long_handled = true;
+	}
 }
 
 void UIManager::triggerElsLeft()
 {
+	if (!els_latched && SpiMaster::getMpgMode() == MpgModeProto::JOG_Z)
+		return;
 	// Same logic as pressing the left ELS button
 	if (els_latched)
 	{
@@ -796,6 +884,8 @@ void UIManager::triggerElsLeft()
 
 void UIManager::triggerElsRight()
 {
+	if (!els_latched && SpiMaster::getMpgMode() == MpgModeProto::JOG_Z)
+		return;
 	// Same logic as pressing the right ELS button
 	if (els_latched)
 	{

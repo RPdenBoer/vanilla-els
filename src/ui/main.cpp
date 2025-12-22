@@ -109,6 +109,9 @@ void setup() {
     lv_init();
     Serial.println("[UI] LVGL init");
 
+    // Load persisted tool offsets (non-volatile)
+    CoordinateSystem::loadToolOffsets();
+
     // Partial buffers (40 lines)
     static lv_color_t buf1[SCREEN_W * 40];
     static lv_color_t buf2[SCREEN_W * 40];
