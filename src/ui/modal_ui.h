@@ -20,6 +20,7 @@ public:
     static void onNumpadKey(lv_event_t *e);
     static void onNumpadClear(lv_event_t *e);
     static void onNumpadBackspace(lv_event_t *e);
+    static void onNumpadCurrent(lv_event_t *e);
 
 private:
     static lv_obj_t *modal_bg;

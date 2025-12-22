@@ -58,6 +58,10 @@ public:
     // Linear helpers that respect mm/in mode
     static void formatLinear(char *out, size_t n, int32_t um);
     static bool parseLinearToUm(const char *s, int32_t *out_um);
+
+    // Tool offsets persistence (UI board NVS)
+    static bool loadToolOffsets();
+    static void saveToolOffsets();
     
     // Rotation helpers
     static int32_t wrap01599(int32_t t);

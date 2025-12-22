@@ -235,6 +235,15 @@ static lv_obj_t *create_numpad(lv_obj_t *parent) {
     lv_label_set_text(lblc, "CLEAR");
     lv_obj_center(lblc);
 
+    lv_obj_t *btn_cur = lv_btn_create(right_col);
+    lv_obj_set_width(btn_cur, LV_PCT(100));
+    lv_obj_set_flex_grow(btn_cur, 1);
+    lv_obj_add_event_cb(btn_cur, ModalManager::onNumpadCurrent, LV_EVENT_CLICKED, nullptr);
+    apply_numpad_key_style(btn_cur);
+    lv_obj_t *lblcur = lv_label_create(btn_cur);
+    lv_label_set_text(lblcur, "CURRENT");
+    lv_obj_center(lblcur);
+
     return pad_row;
 }
 
@@ -432,11 +441,11 @@ void ModalManager::showPitchModal() {
 	char pbuf[32];
     if (LeadscrewProxy::isPitchTpiMode()) {
         float tpi = 25400.0f / fabsf((float)LeadscrewProxy::getPitchUm());
-        snprintf(pbuf, sizeof(pbuf), "%.2f", tpi);
+        snprintf(pbuf, sizeof(pbuf), "%.4f", tpi);
     } else if (CoordinateSystem::isLinearInchMode()) {
-        snprintf(pbuf, sizeof(pbuf), "%.3f", (float)LeadscrewProxy::getPitchUm() / 25400.0f);
+        snprintf(pbuf, sizeof(pbuf), "%.4f", (float)LeadscrewProxy::getPitchUm() / 25400.0f);
     } else {
-        snprintf(pbuf, sizeof(pbuf), "%.2f", (float)LeadscrewProxy::getPitchUm() / 1000.0f);
+        snprintf(pbuf, sizeof(pbuf), "%.3f", (float)LeadscrewProxy::getPitchUm() / 1000.0f);
     }
     trim_trailing_zeros_inplace(pbuf);
     lv_textarea_set_text(ta_value, pbuf);
@@ -447,7 +456,7 @@ void ModalManager::showPitchModal() {
     lv_obj_t *btn_ok = lv_btn_create(row);
     lv_obj_set_size(btn_ok, btn_w, 44);
     lv_obj_add_event_cb(btn_ok, onPitchOk, LV_EVENT_CLICKED, nullptr);
-    lv_obj_set_style_bg_color(btn_ok, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(btn_ok, lv_palette_darken(LV_PALETTE_GREEN, 2), LV_PART_MAIN);
     lv_obj_set_style_text_color(btn_ok, lv_color_white(), LV_PART_MAIN);
     lv_obj_t *lblo = lv_label_create(btn_ok);
     lv_label_set_text(lblo, "OK");
@@ -479,7 +488,7 @@ void ModalManager::showEndstopModal(bool is_max) {
     lv_obj_t *title = lv_label_create(modal_win);
     const char *unit = CoordinateSystem::isLinearInchMode() ? "inch" : "mm";
     char tbuf[32];
-    snprintf(tbuf, sizeof(tbuf), "Z %s %s (%s)", is_max ? "Max" : "Min", is_max ? "]" : "[", unit);
+    snprintf(tbuf, sizeof(tbuf), "Z %s %s (%s)", is_max ? "Right" : "Left", is_max ? "]" : "[", unit);
     lv_label_set_text(title, tbuf);
     lv_obj_set_style_text_font(title, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(title, modal_accent_blue_grey(), 0);
@@ -501,12 +510,17 @@ void ModalManager::showEndstopModal(bool is_max) {
 
 	const int tool = ToolManager::getCurrentTool();
     char pbuf[32];
-    int32_t display_um = EndstopProxy::areEndstopsSet()
-        ? (is_max ? EndstopProxy::getMaxDisplayUm(tool) : EndstopProxy::getMinDisplayUm(tool))
-        : CoordinateSystem::getDisplayZ(tool);
-    CoordinateSystem::formatLinear(pbuf, sizeof(pbuf), display_um);
-    trim_trailing_zeros_inplace(pbuf);
-    lv_textarea_set_text(ta_value, pbuf);
+    const bool has_value = is_max ? EndstopProxy::hasMaxValue() : EndstopProxy::hasMinValue();
+    if (has_value) {
+        int32_t display_um = is_max ? EndstopProxy::getMaxDisplayUm(tool) : EndstopProxy::getMinDisplayUm(tool);
+        CoordinateSystem::formatLinear(pbuf, sizeof(pbuf), display_um);
+        trim_trailing_zeros_inplace(pbuf);
+        lv_textarea_set_text(ta_value, pbuf);
+    } else {
+        CoordinateSystem::formatLinear(pbuf, sizeof(pbuf), 0);
+        trim_trailing_zeros_inplace(pbuf);
+        lv_textarea_set_text(ta_value, pbuf);
+    }
     mark_select_all(ta_value);
 
     const int btn_w = OffsetManager::getMainOffsetButtonWidth();
@@ -514,7 +528,7 @@ void ModalManager::showEndstopModal(bool is_max) {
     lv_obj_t *btn_ok = lv_btn_create(row);
     lv_obj_set_size(btn_ok, btn_w, 44);
     lv_obj_add_event_cb(btn_ok, onEndstopOk, LV_EVENT_CLICKED, nullptr);
-    lv_obj_set_style_bg_color(btn_ok, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(btn_ok, lv_palette_darken(LV_PALETTE_GREEN, 2), LV_PART_MAIN);
     lv_obj_set_style_text_color(btn_ok, lv_color_white(), LV_PART_MAIN);
     lv_obj_t *lblo = lv_label_create(btn_ok);
     lv_label_set_text(lblo, "OK");
@@ -572,6 +586,7 @@ void ModalManager::applyToolOffset() {
         int32_t raw = CoordinateSystem::wrap01599(EncoderProxy::getRawTicks());
         CoordinateSystem::c_tool_ticks[tool] = CoordinateSystem::wrap01599(raw - CoordinateSystem::c_global_ticks[off] - target_ticks);
     }
+    CoordinateSystem::saveToolOffsets();
 }
 
 void ModalManager::applyGlobalOffset() {
@@ -606,6 +621,39 @@ void ModalManager::applyGlobalOffset() {
 void ModalManager::onCancel(lv_event_t *e) { (void)e; closeModal(); }
 void ModalManager::onNumpadClear(lv_event_t *e) { (void)e; if (ta_value) lv_textarea_set_text(ta_value, ""); }
 void ModalManager::onNumpadBackspace(lv_event_t *e) { (void)e; if (ta_value) lv_textarea_delete_char(ta_value); }
+void ModalManager::onNumpadCurrent(lv_event_t *e) {
+    (void)e;
+    if (!ta_value) return;
+
+    char buf[32];
+    if (pitch_modal) {
+        if (LeadscrewProxy::isPitchTpiMode()) {
+            float tpi = 25400.0f / fabsf((float)LeadscrewProxy::getPitchUm());
+            snprintf(buf, sizeof(buf), "%.4f", tpi);
+        } else if (CoordinateSystem::isLinearInchMode()) {
+            snprintf(buf, sizeof(buf), "%.4f", (float)LeadscrewProxy::getPitchUm() / 25400.0f);
+        } else {
+            snprintf(buf, sizeof(buf), "%.3f", (float)LeadscrewProxy::getPitchUm() / 1000.0f);
+        }
+    } else if (endstop_modal) {
+        const int tool = ToolManager::getCurrentTool();
+        CoordinateSystem::formatLinear(buf, sizeof(buf), CoordinateSystem::getDisplayZ(tool));
+    } else {
+        const int tool = ToolManager::getCurrentTool();
+        if (active_axis == AXIS_X) {
+            CoordinateSystem::formatLinear(buf, sizeof(buf), CoordinateSystem::getDisplayX(tool));
+        } else if (active_axis == AXIS_Z) {
+            CoordinateSystem::formatLinear(buf, sizeof(buf), CoordinateSystem::getDisplayZ(tool));
+        } else {
+            int32_t ticks = CoordinateSystem::getDisplayC(EncoderProxy::getRawTicks(), tool);
+            CoordinateSystem::formatDeg(buf, sizeof(buf), CoordinateSystem::ticksToDegX100(ticks));
+        }
+    }
+
+    trim_trailing_zeros_inplace(buf);
+    lv_textarea_set_text(ta_value, buf);
+    mark_select_all(ta_value);
+}
 
 void ModalManager::onNumpadKey(lv_event_t *e) {
     if (!ta_value) return;

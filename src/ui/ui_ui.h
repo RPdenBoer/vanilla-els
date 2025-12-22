@@ -1,6 +1,7 @@
 #pragma once
 
 #include <lvgl.h>
+#include <stdint.h>
 #include "modal_ui.h"
 
 class UIManager {
@@ -53,8 +54,12 @@ private:
 	static bool els_latched;
     static bool endstop_min_long_pressed;
     static bool endstop_max_long_pressed;
-	static bool btn_left_last;
-	static bool btn_right_last;
+    static bool btn_left_down;
+    static bool btn_right_down;
+    static bool btn_left_long_handled;
+    static bool btn_right_long_handled;
+    static uint32_t btn_left_down_ms;
+    static uint32_t btn_right_down_ms;
 
 	static void createUI();
     static void updateJogAvailability();
