@@ -16,6 +16,8 @@ int32_t SpiMaster::endstop_min_um = 0;
 int32_t SpiMaster::endstop_max_um = 0;
 bool SpiMaster::endstop_min_enabled = false;
 bool SpiMaster::endstop_max_enabled = false;
+int32_t SpiMaster::sync_z_um = 0;
+bool SpiMaster::sync_enabled = false;
 MpgModeProto SpiMaster::mpg_mode = MpgModeProto::RPM_CONTROL;
 
 // Use HSPI for communication with motion board
@@ -98,6 +100,8 @@ void SpiMaster::buildCommand(CommandPacket& cmd) {
     cmd.endstop_min_enabled = endstop_min_enabled ? 1 : 0;
     cmd.endstop_max_enabled = endstop_max_enabled ? 1 : 0;
 	cmd.mpg_mode = mpg_mode;
+	cmd.sync_z_um = sync_z_um;
+	cmd.sync_enabled = sync_enabled ? 1 : 0;
 	cmd.sequence = sequence++;
 }
 
@@ -184,6 +188,16 @@ void SpiMaster::setEndstops(int32_t min_um, int32_t max_um, bool min_en, bool ma
     endstop_max_um = max_um;
     endstop_min_enabled = min_en;
     endstop_max_enabled = max_en;
+}
+
+void SpiMaster::setSync(int32_t z_um, bool enabled) {
+#if DEBUG_SPI_LOGGING
+	if (enabled != sync_enabled || z_um != sync_z_um) {
+		Serial.printf("[UI->Motion] Sync: %s @ %ld um\n", enabled ? "ON" : "OFF", z_um);
+	}
+#endif
+	sync_z_um = z_um;
+	sync_enabled = enabled;
 }
 
 void SpiMaster::setMpgMode(MpgModeProto mode)

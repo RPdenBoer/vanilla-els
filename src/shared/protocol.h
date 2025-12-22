@@ -11,7 +11,7 @@
 static constexpr size_t PROTOCOL_PACKET_SIZE = 32;
 
 // Protocol version for compatibility checking
-static constexpr uint8_t PROTOCOL_VERSION = 2;
+static constexpr uint8_t PROTOCOL_VERSION = 4;
 
 // ============================================================================
 // MPG Mode (Manual Pulse Generator routing)
@@ -41,6 +41,18 @@ enum class MotionCommand : uint8_t
 };
 
 // ============================================================================
+// Sync state (Motion -> UI)
+// ============================================================================
+enum class SyncStateProto : uint8_t
+{
+	SYNC_DISABLED = 0,
+	SYNC_OUT_OF_SYNC = 1,
+	SYNC_WAITING = 2,
+	SYNC_IN_SYNC = 3,
+};
+
+
+// ============================================================================
 // Status flags from Motion → UI
 // ============================================================================
 struct MotionStatusFlags {
@@ -50,7 +62,7 @@ struct MotionStatusFlags {
     uint8_t spindle_moving  : 1;  // Spindle is rotating (RPM > threshold)
     uint8_t comms_ok        : 1;  // Communication healthy
 	uint8_t mpg_mode : 2;		  // Current MPG mode (MpgModeProto)
-	uint8_t reserved : 1;
+	uint8_t sync_waiting : 1;	  // ELS sync is waiting for spindle index
 };
 
 // ============================================================================
@@ -66,11 +78,13 @@ struct __attribute__((packed)) CommandPacket {
     int32_t endstop_min_um;       // Soft endstop min        [4]
     int32_t endstop_max_um;       // Soft endstop max        [4]
     
-    uint8_t endstop_min_enabled;  // Min endstop active      [1]
-    uint8_t endstop_max_enabled;  // Max endstop active      [1]
+	uint8_t endstop_min_enabled;  // Min endstop active      [1]
+	uint8_t endstop_max_enabled;  // Max endstop active      [1]
 	MpgModeProto mpg_mode;		  // MPG routing mode        [1]
 
-	uint8_t reserved[11];		  // Padding                 [11]
+	int32_t sync_z_um;			  // Sync target Z (machine) [4]
+	uint8_t sync_enabled;		  // Sync enabled flag       [1]
+	uint8_t reserved[6];		  // Padding                 [6]
 	uint8_t sequence;             // Packet sequence number  [1]
     uint8_t checksum;             // XOR checksum            [1]
 };                                // Total: 32 bytes
@@ -83,7 +97,7 @@ struct __attribute__((packed)) StatusPacket {
     uint8_t version;              // Protocol version        [1]
     MotionStatusFlags flags;      // Status flags            [1]
     uint8_t fault_code;           // Fault code if any       [1]
-    uint8_t reserved1;            // Padding                 [1]
+    SyncStateProto sync_state;    // Sync state              [1]
     
     int32_t x_count;              // X encoder raw count     [4]
     int32_t z_count;              // Z encoder raw count     [4]

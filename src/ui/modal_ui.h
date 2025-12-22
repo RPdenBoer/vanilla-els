@@ -9,6 +9,7 @@ public:
     static void showOffsetModal(AxisSel axis);
     static void showPitchModal();
     static void showEndstopModal(bool is_max); // false = min "[", true = max "]"
+    static void showSyncModal();
     static void closeModal();
     
     static void onCancel(lv_event_t *e);
@@ -17,6 +18,7 @@ public:
     static void onPitchOk(lv_event_t *e);
     static void onEndstopOk(lv_event_t *e);
     static void onEndstopClear(lv_event_t *e);
+    static void onSyncOk(lv_event_t *e);
     static void onNumpadKey(lv_event_t *e);
     static void onNumpadClear(lv_event_t *e);
     static void onNumpadBackspace(lv_event_t *e);
@@ -31,9 +33,11 @@ private:
     static bool pitch_modal;
     static bool endstop_modal;
     static bool endstop_is_max;
+    static bool sync_modal;
 
     static void applyToolOffset();
     static void applyGlobalOffset();
     static void applyPitch();
     static void applyEndstop();
+    static void applySync();
 };
