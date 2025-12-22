@@ -156,6 +156,8 @@ static bool prev_endstop_min_en = false;
 static bool prev_endstop_max_en = false;
 static int32_t prev_endstop_min = 0;
 static int32_t prev_endstop_max = 0;
+static bool prev_sync_enabled = false;
+static int32_t prev_sync_z = 0;
 
 void loop() {
     // Build status packet FIRST (before processing SPI)
@@ -182,9 +184,17 @@ void loop() {
 	// Status flags
     status.flags.els_enabled = ElsCore::isEnabled();
     status.flags.els_fault = ElsCore::hasFault();
-    status.flags.endstop_hit = ElsCore::endstopTriggered();
+	status.flags.endstop_hit = ElsCore::endstopTriggered();
     status.flags.spindle_moving = (abs(status.rpm_signed) > 10);
     status.flags.comms_ok = SpiSlave::isConnected();
+	status.flags.sync_waiting = ElsCore::isSyncWaiting();
+	status.sync_state = SyncStateProto::SYNC_DISABLED;
+	if (ElsCore::isSyncEnabled()) {
+		if (!ElsCore::isEnabled()) status.sync_state = SyncStateProto::SYNC_OUT_OF_SYNC;
+		else if (ElsCore::isSyncWaiting()) status.sync_state = SyncStateProto::SYNC_WAITING;
+		else if (ElsCore::isSyncIn()) status.sync_state = SyncStateProto::SYNC_IN_SYNC;
+		else status.sync_state = SyncStateProto::SYNC_OUT_OF_SYNC;
+	}
     
     // Update TX buffer immediately so it's ready when master polls
     SpiSlave::setStatus(status);
@@ -228,12 +238,19 @@ void loop() {
             prev_endstop_max_en = endstop_max_en;
             prev_endstop_max = cmd.endstop_max_um;
         }
+		if (cmd.sync_enabled != prev_sync_enabled || cmd.sync_z_um != prev_sync_z) {
+			Serial.printf("[Motion] Sync: %s @ %ld um\n",
+				cmd.sync_enabled ? "ON" : "OFF", cmd.sync_z_um);
+			prev_sync_enabled = (cmd.sync_enabled != 0);
+			prev_sync_z = cmd.sync_z_um;
+		}
 #endif
         
         // Update ELS state from command
         ElsCore::setEnabled(els_en);
         ElsCore::setPitchUm(cmd.pitch_um);
         ElsCore::setDirectionMul(cmd.direction_mul);
+		ElsCore::setSync(cmd.sync_enabled != 0, cmd.sync_z_um);
         ElsCore::setEndstops(
             cmd.endstop_min_um, 
             cmd.endstop_max_um,

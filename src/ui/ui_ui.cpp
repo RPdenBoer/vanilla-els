@@ -7,6 +7,7 @@
 #include "mono_font_ui.h"
 #include "leadscrew_proxy.h"
 #include "endstop_proxy.h"
+#include "sync_proxy.h"
 #include "spi_master.h"
 #include <Arduino.h>
 #include <cstring>
@@ -53,6 +54,7 @@ lv_obj_t *UIManager::btn_jog_l = nullptr;
 lv_obj_t *UIManager::btn_jog_r = nullptr;
 lv_obj_t *UIManager::btn_endstop_min_ptr = nullptr;
 lv_obj_t *UIManager::btn_endstop_max_ptr = nullptr;
+lv_obj_t *UIManager::btn_sync_ptr = nullptr;
 bool UIManager::els_latched = false;
 bool UIManager::endstop_min_long_pressed = false;
 bool UIManager::endstop_max_long_pressed = false;
@@ -271,10 +273,48 @@ void UIManager::createUI() {
     lv_obj_set_style_text_color(btn_pitch, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
     apply_button_common_style(btn_pitch);
     lbl_pitch = lv_label_create(btn_pitch);
-    lv_obj_set_style_text_font(lbl_pitch, &lv_font_montserrat_24, 0);
-    char pbuf[32]; LeadscrewProxy::formatPitchLabel(pbuf, sizeof(pbuf));
-    lv_label_set_text(lbl_pitch, pbuf);
+	lv_obj_set_style_text_font(lbl_pitch, &lv_font_montserrat_28, 0);
+	char pbuf[32];
+	LeadscrewProxy::formatPitchLabel(pbuf, sizeof(pbuf));
+	lv_label_set_text(lbl_pitch, pbuf);
     lv_obj_center(lbl_pitch);
+
+	// Sync button
+	btn_sync_ptr = lv_btn_create(pitch_row);
+	lv_obj_set_height(btn_sync_ptr, LV_PCT(100));
+	lv_obj_set_width(btn_sync_ptr, 52);
+	lv_obj_clear_flag(btn_sync_ptr, LV_OBJ_FLAG_SCROLLABLE);
+	lv_obj_add_event_cb(btn_sync_ptr, onEditSync, LV_EVENT_SHORT_CLICKED, nullptr);
+	lv_obj_add_event_cb(btn_sync_ptr, onLongPressSync, LV_EVENT_LONG_PRESSED, nullptr);
+	lv_obj_set_style_bg_opa(btn_sync_ptr, LV_OPA_TRANSP, LV_PART_MAIN);
+	lv_obj_set_style_border_width(btn_sync_ptr, 1, LV_PART_MAIN);
+	lv_obj_set_style_border_color(btn_sync_ptr, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+	lv_obj_set_style_text_color(btn_sync_ptr, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+	lv_obj_set_style_bg_opa(btn_sync_ptr, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_CHECKED);
+	lv_obj_set_style_bg_color(btn_sync_ptr, endstop_active_color(), LV_PART_MAIN | LV_STATE_CHECKED);
+	lv_obj_set_style_border_color(btn_sync_ptr, endstop_active_color(), LV_PART_MAIN | LV_STATE_CHECKED);
+	lv_obj_set_style_text_color(btn_sync_ptr, lv_color_white(), LV_PART_MAIN | LV_STATE_CHECKED);
+	lv_obj_set_style_bg_opa(btn_sync_ptr, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_USER_1);
+	lv_obj_set_style_bg_color(btn_sync_ptr, lv_palette_darken(LV_PALETTE_ORANGE, 2), LV_PART_MAIN | LV_STATE_USER_1);
+	lv_obj_set_style_border_color(btn_sync_ptr, lv_palette_darken(LV_PALETTE_ORANGE, 2), LV_PART_MAIN | LV_STATE_USER_1);
+	lv_obj_set_style_text_color(btn_sync_ptr, lv_color_white(), LV_PART_MAIN | LV_STATE_USER_1);
+	lv_obj_set_style_bg_opa(btn_sync_ptr, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_USER_1 | LV_STATE_CHECKED);
+	lv_obj_set_style_bg_color(btn_sync_ptr, lv_palette_darken(LV_PALETTE_ORANGE, 2), LV_PART_MAIN | LV_STATE_USER_1 | LV_STATE_CHECKED);
+	lv_obj_set_style_border_color(btn_sync_ptr, lv_palette_darken(LV_PALETTE_ORANGE, 2), LV_PART_MAIN | LV_STATE_USER_1 | LV_STATE_CHECKED);
+	lv_obj_set_style_text_color(btn_sync_ptr, lv_color_white(), LV_PART_MAIN | LV_STATE_USER_1 | LV_STATE_CHECKED);
+	lv_obj_set_style_bg_opa(btn_sync_ptr, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_USER_2);
+	lv_obj_set_style_bg_color(btn_sync_ptr, lv_palette_darken(LV_PALETTE_GREEN, 1), LV_PART_MAIN | LV_STATE_USER_2);
+	lv_obj_set_style_border_color(btn_sync_ptr, lv_palette_darken(LV_PALETTE_GREEN, 1), LV_PART_MAIN | LV_STATE_USER_2);
+	lv_obj_set_style_text_color(btn_sync_ptr, lv_color_white(), LV_PART_MAIN | LV_STATE_USER_2);
+	lv_obj_set_style_bg_opa(btn_sync_ptr, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_USER_2 | LV_STATE_CHECKED);
+	lv_obj_set_style_bg_color(btn_sync_ptr, lv_palette_darken(LV_PALETTE_GREEN, 1), LV_PART_MAIN | LV_STATE_USER_2 | LV_STATE_CHECKED);
+	lv_obj_set_style_border_color(btn_sync_ptr, lv_palette_darken(LV_PALETTE_GREEN, 1), LV_PART_MAIN | LV_STATE_USER_2 | LV_STATE_CHECKED);
+	lv_obj_set_style_text_color(btn_sync_ptr, lv_color_white(), LV_PART_MAIN | LV_STATE_USER_2 | LV_STATE_CHECKED);
+	apply_button_common_style(btn_sync_ptr);
+	lv_obj_t *lbl_sync = lv_label_create(btn_sync_ptr);
+	lv_label_set_text(lbl_sync, "|•|");
+	lv_obj_set_style_text_font(lbl_sync, &lv_font_montserrat_20, 0);
+	lv_obj_center(lbl_sync);
 
 	// Endstop row
 	lv_obj_t *els_row = lv_obj_create(feature_col);
@@ -613,6 +653,8 @@ void UIManager::update() {
     }
 
     if (lbl_pitch_mode) lv_label_set_text(lbl_pitch_mode, LeadscrewProxy::isPitchTpiMode() ? "TPI" : "PITCH");
+
+	updateSyncButtonStates();
 }
 
 void UIManager::onToggleUnits(lv_event_t *e) {
@@ -626,10 +668,24 @@ void UIManager::onEditPitch(lv_event_t *e) {
     ModalManager::showPitchModal();
 }
 
+void UIManager::onEditSync(lv_event_t *e)
+{
+	if (lv_event_get_code(e) != LV_EVENT_SHORT_CLICKED)
+		return;
+	ModalManager::showSyncModal();
+}
+
 void UIManager::onTogglePitchMode(lv_event_t *e) {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
     LeadscrewProxy::togglePitchTpiMode();
     update();
+}
+
+void UIManager::onLongPressSync(lv_event_t *e)
+{
+	(void)e;
+	SyncProxy::toggleEnabled();
+	updateSyncButtonStates();
 }
 
 void UIManager::onToggleEls(lv_event_t *e) {
@@ -769,6 +825,26 @@ void UIManager::updateEndstopButtonStates() {
         if (EndstopProxy::isMaxEnabled()) lv_obj_add_state(btn_endstop_max_ptr, LV_STATE_CHECKED);
         else lv_obj_clear_state(btn_endstop_max_ptr, LV_STATE_CHECKED);
     }
+}
+
+void UIManager::updateSyncButtonStates()
+{
+	if (!btn_sync_ptr)
+		return;
+	if (SyncProxy::isEnabled())
+		lv_obj_add_state(btn_sync_ptr, LV_STATE_CHECKED);
+	else
+		lv_obj_clear_state(btn_sync_ptr, LV_STATE_CHECKED);
+
+	if (SyncProxy::isWaiting())
+		lv_obj_add_state(btn_sync_ptr, LV_STATE_USER_1);
+	else
+		lv_obj_clear_state(btn_sync_ptr, LV_STATE_USER_1);
+
+	if (SyncProxy::isInSync())
+		lv_obj_add_state(btn_sync_ptr, LV_STATE_USER_2);
+	else
+		lv_obj_clear_state(btn_sync_ptr, LV_STATE_USER_2);
 }
 
 void UIManager::forceElsOff() {
@@ -914,3 +990,4 @@ void UIManager::triggerElsRight()
 
 // Global function for modal callback
 void updateEndstopButtonStates() { UIManager::updateEndstopButtonStates(); }
+void updateSyncButtonStates() { UIManager::updateSyncButtonStates(); }

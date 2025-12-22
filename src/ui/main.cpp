@@ -17,6 +17,7 @@
 #include "encoder_proxy.h"
 #include "leadscrew_proxy.h"
 #include "endstop_proxy.h"
+#include "sync_proxy.h"
 #include "ui_ui.h"
 
 // ============================================================================
@@ -33,6 +34,10 @@ static void updateFromMotionBoard() {
 	// Update encoder proxy with spindle data and MPG state
 	EncoderProxy::updateFromMotion(status.c_count, status.rpm_signed,
 								   status.target_rpm, status.flags.mpg_mode);
+
+	const SyncStateProto sync_state = status.sync_state;
+	SyncProxy::setWaiting(sync_state == SyncStateProto::SYNC_WAITING);
+	SyncProxy::setInSync(sync_state == SyncStateProto::SYNC_IN_SYNC);
 
 	// Check for endstop hit flag from motion board
     if (status.flags.endstop_hit) {
@@ -51,6 +56,7 @@ static void sendCommandsToMotionBoard() {
         EndstopProxy::isMinEnabled(),
         EndstopProxy::isMaxEnabled()
     );
+	SpiMaster::setSync(SyncProxy::getMachineUm(), SyncProxy::isEnabled());
 }
 
 // ============================================================================

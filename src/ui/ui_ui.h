@@ -18,6 +18,8 @@ public:
     static void onToggleUnits(lv_event_t *e);
     static void onEditPitch(lv_event_t *e);
     static void onTogglePitchMode(lv_event_t *e);
+    static void onEditSync(lv_event_t *e);
+    static void onLongPressSync(lv_event_t *e);
     static void onToggleEls(lv_event_t *e);
     static void onJog(lv_event_t *e);
     static void onEditEndstopMin(lv_event_t *e);
@@ -27,6 +29,7 @@ public:
 	static void onLongPressZ(lv_event_t *e);
 	static void onLongPressC(lv_event_t *e);
 	static void updateEndstopButtonStates();
+	static void updateSyncButtonStates();
     static void forceElsOff();
     static void setElsButtonActive(bool active);
 	static void initPhysicalButtons();
@@ -42,6 +45,7 @@ private:
 	static lv_obj_t *btn_jog_r;
 	static lv_obj_t *btn_endstop_min_ptr;
     static lv_obj_t *btn_endstop_max_ptr;
+    static lv_obj_t *btn_sync_ptr;
     static lv_obj_t *lbl_x_unit;
     static lv_obj_t *lbl_z_unit;
     static lv_obj_t *lbl_c_unit;
@@ -70,3 +74,4 @@ private:
 
 // Global function for modal callback
 void updateEndstopButtonStates();
+void updateSyncButtonStates();

@@ -49,8 +49,8 @@ void LeadscrewProxy::formatPitchLabel(char *out, size_t n) {
         // Display as TPI
         const float abs_pitch = (float)abs(pitch_um);
         float tpi = 25400.0f / abs_pitch;
-        if (pitch_um < 0) snprintf(out, n, "-%.4f", tpi);
-        else              snprintf(out, n, "%.4f", tpi);
+        if (pitch_um < 0) snprintf(out, n, "-%.3f", tpi);
+        else              snprintf(out, n, "%.3f", tpi);
         return;
     }
 

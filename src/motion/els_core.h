@@ -22,6 +22,12 @@ public:
     
     // Direction multiplier (+1 normal, -1 reversed for jog)
     static void setDirectionMul(int8_t mul);
+
+    // Sync helper (pause at target Z and wait for spindle index)
+    static void setSync(bool enabled, int32_t z_um);
+    static bool isSyncWaiting() { return sync_waiting; }
+    static bool isSyncEnabled() { return sync_enabled; }
+    static bool isSyncIn() { return sync_in; }
     
     // Software endstops (in raw Z encoder microns)
     static void setEndstops(int32_t min_um, int32_t max_um, bool min_en, bool max_en);
@@ -46,6 +52,16 @@ private:
     
     static int32_t last_spindle_count;
     static int64_t step_accumulator;  // Fixed-point accumulator for sub-step precision
-    
+
+    static bool sync_enabled;
+    static bool sync_waiting;
+    static bool sync_armed;
+    static bool sync_in;
+    static int32_t sync_z_um;
+    static int32_t sync_tolerance_um;
+    static int32_t sync_tolerance_out_um;
+    static int32_t sync_ref_z_um;
+    static int32_t sync_ref_spindle;
+
     static bool checkEndstops(int32_t z_um);
 };

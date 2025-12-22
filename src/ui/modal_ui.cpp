@@ -6,6 +6,7 @@
 #include "config_ui.h"
 #include "leadscrew_proxy.h"
 #include "endstop_proxy.h"
+#include "sync_proxy.h"
 
 #include <cstring>
 #include <cstdio>
@@ -303,6 +304,7 @@ static lv_obj_t *create_modal_row(lv_obj_t *parent) {
 
 // Forward declaration for UI update
 void updateEndstopButtonStates();
+void updateSyncButtonStates();
 
 lv_obj_t *ModalManager::modal_bg = nullptr;
 lv_obj_t *ModalManager::modal_win = nullptr;
@@ -312,12 +314,14 @@ AxisSel ModalManager::active_axis = AXIS_X;
 bool ModalManager::pitch_modal = false;
 bool ModalManager::endstop_modal = false;
 bool ModalManager::endstop_is_max = false;
+bool ModalManager::sync_modal = false;
 
 void ModalManager::showOffsetModal(AxisSel axis) {
     if (modal_bg) return;
     active_axis = axis;
     pitch_modal = false;
     endstop_modal = false;
+	sync_modal = false;
 
     create_modal_base(&modal_bg, &modal_win);
 
@@ -411,6 +415,7 @@ void ModalManager::showPitchModal() {
     if (modal_bg) return;
     pitch_modal = true;
     endstop_modal = false;
+	sync_modal = false;
 
     create_modal_base(&modal_bg, &modal_win);
 
@@ -482,6 +487,7 @@ void ModalManager::showEndstopModal(bool is_max) {
     pitch_modal = false;
     endstop_modal = true;
     endstop_is_max = is_max;
+	sync_modal = false;
 
     create_modal_base(&modal_bg, &modal_win);
 
@@ -528,6 +534,77 @@ void ModalManager::showEndstopModal(bool is_max) {
     lv_obj_t *btn_ok = lv_btn_create(row);
     lv_obj_set_size(btn_ok, btn_w, 44);
     lv_obj_add_event_cb(btn_ok, onEndstopOk, LV_EVENT_CLICKED, nullptr);
+    lv_obj_set_style_bg_color(btn_ok, lv_palette_darken(LV_PALETTE_GREEN, 2), LV_PART_MAIN);
+    lv_obj_set_style_text_color(btn_ok, lv_color_white(), LV_PART_MAIN);
+    lv_obj_t *lblo = lv_label_create(btn_ok);
+    lv_label_set_text(lblo, "OK");
+    lv_obj_center(lblo);
+    apply_modal_button_common_style(btn_ok);
+
+    lv_obj_t *btn_x = lv_btn_create(row);
+    lv_obj_set_size(btn_x, btn_w, 44);
+    lv_obj_add_event_cb(btn_x, onCancel, LV_EVENT_CLICKED, nullptr);
+    lv_obj_set_style_bg_opa(btn_x, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(btn_x, 1, LV_PART_MAIN);
+    lv_obj_set_style_border_color(btn_x, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+    lv_obj_t *lblx = lv_label_create(btn_x);
+    lv_label_set_text(lblx, "X");
+    lv_obj_center(lblx);
+    apply_modal_button_common_style(btn_x);
+
+    kb = create_numpad(modal_win);
+}
+
+void ModalManager::showSyncModal() {
+    if (modal_bg) return;
+    pitch_modal = false;
+    endstop_modal = false;
+	sync_modal = true;
+
+    create_modal_base(&modal_bg, &modal_win);
+
+    lv_obj_t *title = lv_label_create(modal_win);
+    const char *unit = CoordinateSystem::isLinearInchMode() ? "inch" : "mm";
+    char tbuf[32];
+    snprintf(tbuf, sizeof(tbuf), "Sync Z (*) (%s)", unit);
+    lv_label_set_text(title, tbuf);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_color(title, modal_accent_blue_grey(), 0);
+
+    lv_obj_t *row = create_modal_row(modal_win);
+
+    ta_value = lv_textarea_create(row);
+    lv_obj_set_height(ta_value, 56);
+    lv_obj_set_flex_grow(ta_value, 1);
+    lv_textarea_set_one_line(ta_value, true);
+    lv_obj_clear_flag(ta_value, LV_OBJ_FLAG_SCROLLABLE);
+	lv_obj_add_event_cb(ta_value, onTextareaClicked, LV_EVENT_CLICKED, nullptr);
+	lv_obj_set_style_text_font(ta_value, &lv_font_montserrat_28, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(ta_value, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(ta_value, 0, LV_PART_MAIN);
+	// Selection styling - blue-grey to match modal buttons
+	lv_obj_set_style_bg_color(ta_value, modal_accent_blue_grey(), LV_PART_SELECTED);
+	lv_obj_set_style_bg_opa(ta_value, LV_OPA_COVER, LV_PART_SELECTED);
+
+	const int tool = ToolManager::getCurrentTool();
+    char pbuf[32];
+    if (SyncProxy::hasValue()) {
+        int32_t display_um = SyncProxy::getDisplayUm(tool);
+        CoordinateSystem::formatLinear(pbuf, sizeof(pbuf), display_um);
+        trim_trailing_zeros_inplace(pbuf);
+        lv_textarea_set_text(ta_value, pbuf);
+    } else {
+        CoordinateSystem::formatLinear(pbuf, sizeof(pbuf), 0);
+        trim_trailing_zeros_inplace(pbuf);
+        lv_textarea_set_text(ta_value, pbuf);
+    }
+    mark_select_all(ta_value);
+
+    const int btn_w = OffsetManager::getMainOffsetButtonWidth();
+
+    lv_obj_t *btn_ok = lv_btn_create(row);
+    lv_obj_set_size(btn_ok, btn_w, 44);
+    lv_obj_add_event_cb(btn_ok, onSyncOk, LV_EVENT_CLICKED, nullptr);
     lv_obj_set_style_bg_color(btn_ok, lv_palette_darken(LV_PALETTE_GREEN, 2), LV_PART_MAIN);
     lv_obj_set_style_text_color(btn_ok, lv_color_white(), LV_PART_MAIN);
     lv_obj_t *lblo = lv_label_create(btn_ok);
@@ -636,6 +713,9 @@ void ModalManager::onNumpadCurrent(lv_event_t *e) {
             snprintf(buf, sizeof(buf), "%.3f", (float)LeadscrewProxy::getPitchUm() / 1000.0f);
         }
     } else if (endstop_modal) {
+        const int tool = ToolManager::getCurrentTool();
+        CoordinateSystem::formatLinear(buf, sizeof(buf), CoordinateSystem::getDisplayZ(tool));
+    } else if (sync_modal) {
         const int tool = ToolManager::getCurrentTool();
         CoordinateSystem::formatLinear(buf, sizeof(buf), CoordinateSystem::getDisplayZ(tool));
     } else {
@@ -761,3 +841,17 @@ void ModalManager::onEndstopClear(lv_event_t *e) {
     updateEndstopButtonStates();
     closeModal();
 }
+
+void ModalManager::applySync() {
+    if (!ta_value) return;
+    const int tool = ToolManager::getCurrentTool();
+    int32_t target_um = 0;
+    if (!parse_linear_expression_to_um(lv_textarea_get_text(ta_value), &target_um)
+        && !CoordinateSystem::parseLinearToUm(lv_textarea_get_text(ta_value), &target_um))
+        target_um = CoordinateSystem::getDisplayZ(tool);
+
+    SyncProxy::setFromDisplayUm(target_um, tool);
+    updateSyncButtonStates();
+}
+
+void ModalManager::onSyncOk(lv_event_t *e) { (void)e; applySync(); closeModal(); }
