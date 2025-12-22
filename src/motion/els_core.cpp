@@ -33,10 +33,12 @@ bool ElsCore::sync_waiting = false;
 bool ElsCore::sync_armed = true;
 bool ElsCore::sync_in = false;
 int32_t ElsCore::sync_z_um = 0;
+int32_t ElsCore::sync_phase_ticks = 0;
 int32_t ElsCore::sync_tolerance_um = 10;
 int32_t ElsCore::sync_tolerance_out_um = 25;
 int32_t ElsCore::sync_ref_z_um = 0;
 int32_t ElsCore::sync_ref_spindle = 0;
+int32_t ElsCore::last_z_um = 0;
 
 int32_t ElsCore::endstop_min_um = INT32_MIN;
 int32_t ElsCore::endstop_max_um = INT32_MAX;
@@ -55,13 +57,24 @@ static inline int32_t wrap_phase(int32_t count) {
 	return r;
 }
 
-static inline bool crossed_index(int32_t prev, int32_t curr) {
+static inline bool crossed_phase(int32_t prev, int32_t curr, int32_t target_phase) {
+	const int32_t delta = curr - prev;
+	if (delta == 0) return false;
+	if (delta >= C_COUNTS_PER_REV || delta <= -C_COUNTS_PER_REV) return true;
+
 	const int32_t prev_phase = wrap_phase(prev);
 	const int32_t curr_phase = wrap_phase(curr);
-	if (prev_phase == 0 || curr_phase == 0) return true;
-	const int32_t delta = curr - prev;
-	if (delta >= 0) return curr_phase < prev_phase;
-	return curr_phase > prev_phase;
+	const int32_t target = wrap_phase(target_phase);
+
+	if (prev_phase == target || curr_phase == target) return true;
+
+	if (delta > 0) {
+		if (prev_phase < curr_phase) return (target > prev_phase && target < curr_phase);
+		return (target > prev_phase || target < curr_phase);
+	}
+
+	if (prev_phase > curr_phase) return (target < prev_phase && target > curr_phase);
+	return (target < prev_phase || target > curr_phase);
 }
 
 void ElsCore::init() {
@@ -76,6 +89,7 @@ void ElsCore::init() {
 	sync_in = false;
 	sync_ref_z_um = 0;
 	sync_ref_spindle = 0;
+	last_z_um = EncoderMotion::getZCount() * Z_UM_PER_COUNT;
 }
 
 void ElsCore::setEnabled(bool on) {
@@ -85,6 +99,7 @@ void ElsCore::setEnabled(bool on) {
 		step_accumulator = 0;
         fault = false;
         endstop_triggered = false;
+		last_z_um = EncoderMotion::getZCount() * Z_UM_PER_COUNT;
     }
     enabled = on;
 	if (!enabled) {
@@ -102,20 +117,22 @@ void ElsCore::setDirectionMul(int8_t mul) {
     direction_mul = (mul < 0) ? -1 : 1;
 }
 
-void ElsCore::setSync(bool enabled, int32_t z_um) {
+void ElsCore::setSync(bool enabled, int32_t z_um, int32_t c_ticks) {
 	const bool was_enabled = sync_enabled;
 	const int32_t prev_z = sync_z_um;
+	const int32_t prev_phase = sync_phase_ticks;
 	sync_enabled = enabled;
 	sync_z_um = z_um;
+	sync_phase_ticks = c_ticks;
 	if (!sync_enabled) {
 		sync_waiting = false;
-		sync_armed = true;
+		sync_armed = false;
 		sync_in = false;
 		return;
 	}
-	if (!was_enabled || prev_z != z_um) {
+	if (!was_enabled || prev_z != z_um || prev_phase != c_ticks) {
 		sync_waiting = false;
-		sync_armed = true;
+		sync_armed = false;
 		sync_in = false;
 	}
 }
@@ -142,15 +159,17 @@ void ElsCore::update() {
 
 	// Get current spindle position (from encoder or stepper, depending on mode)
 	int32_t spindle_count = getSpindlePosition();
+	const int32_t z_um = EncoderMotion::getZCount() * Z_UM_PER_COUNT;
 
 	if (sync_enabled) {
-		const int32_t z_um = EncoderMotion::getZCount() * Z_UM_PER_COUNT;
 		const int32_t z_delta = z_um - sync_z_um;
 		const int32_t abs_z_delta = (z_delta < 0) ? -z_delta : z_delta;
+		const bool z_in_window = (abs_z_delta <= sync_tolerance_um);
 
 		if (sync_waiting) {
-			if (!crossed_index(last_spindle_count, spindle_count)) {
+			if (!crossed_phase(last_spindle_count, spindle_count, sync_phase_ticks)) {
 				last_spindle_count = spindle_count;
+				last_z_um = z_um;
 				return;
 			}
 			sync_waiting = false;
@@ -160,15 +179,15 @@ void ElsCore::update() {
 			last_spindle_count = spindle_count;
 			step_accumulator = 0;
 		} else {
-			if (!sync_armed && abs_z_delta > sync_tolerance_um) {
+			if (!z_in_window) {
 				sync_armed = true;
-			}
-			if (sync_armed && abs_z_delta <= sync_tolerance_um) {
+			} else if (sync_armed) {
 				sync_waiting = true;
 				sync_armed = false;
 				sync_in = false;
 				last_spindle_count = spindle_count;
 				step_accumulator = 0;
+				last_z_um = z_um;
 				return;
 			}
 		}
@@ -188,6 +207,7 @@ void ElsCore::update() {
 
 	int32_t spindle_delta = spindle_count - last_spindle_count;
     last_spindle_count = spindle_count;
+	last_z_um = z_um;
     
     if (spindle_delta == 0) return;
     
@@ -208,7 +228,6 @@ void ElsCore::update() {
 #endif
     
     // Check endstops before moving
-    int32_t z_um = EncoderMotion::getZCount() * Z_UM_PER_COUNT;
     if (!checkEndstops(z_um)) {
         enabled = false;
         fault = true;

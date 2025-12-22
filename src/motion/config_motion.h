@@ -40,6 +40,10 @@ static constexpr int32_t SPINDLE_STEPS_PER_REV = 1600;
 static constexpr int32_t SPINDLE_MAX_RPM = 3000;
 static constexpr int32_t SPINDLE_MIN_RPM = 1; // Minimum commanded RPM
 static constexpr bool SPINDLE_INVERT_DIR = false;
+static constexpr uint32_t SPINDLE_PULSE_US = 2;          // Step pulse width
+static constexpr uint32_t SPINDLE_RMT_RES_HZ = 500000;   // 2us tick to allow long low times
+static constexpr uint32_t SPINDLE_MIN_STEP_PERIOD_US = 12;   // ~83k steps/s cap
+static constexpr uint32_t SPINDLE_MAX_STEP_PERIOD_US = 50000; // 20 Hz min
 
 // MPG (Manual Pulse Generator) encoder for speed control
 // Quadrature encoder replaces potentiometer for precise RPM adjustment

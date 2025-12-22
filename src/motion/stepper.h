@@ -27,5 +27,4 @@ public:
 private:
     static int32_t position;
     static bool rmt_ready;
-    static void* rmt_channel;
 };

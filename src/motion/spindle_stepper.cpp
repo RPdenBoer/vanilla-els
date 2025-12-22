@@ -2,9 +2,7 @@
 #include "config_motion.h"
 #include "mpg_encoder.h"
 #include <Arduino.h>
-#include "driver/gptimer.h"
-#include "driver/gpio.h"
-#include "soc/gpio_struct.h"
+#include "esp32-hal-rmt.h"
 
 // ============================================================================
 // Static member initialization
@@ -18,45 +16,13 @@ int8_t SpindleStepper::direction = 0;
 bool SpindleStepper::running = false;
 
 uint32_t SpindleStepper::last_update_us = 0;
-uint32_t SpindleStepper::step_interval_us = 0;
-uint32_t SpindleStepper::last_step_us = 0;
+uint32_t SpindleStepper::last_dt_us = 0;
+uint32_t SpindleStepper::step_period_us = 0;
+int32_t SpindleStepper::steps_per_sec = 0;
+int64_t SpindleStepper::step_accumulator_fp = 0;
+bool SpindleStepper::rmt_ready = false;
 
-void* SpindleStepper::timer_handle = nullptr;
-
-// Hardware timer for step generation
-static gptimer_handle_t step_timer = nullptr;
-static volatile bool step_pin_state = false;
-
-// ============================================================================
-// Timer ISR - generates step pulses at precise intervals
-// ============================================================================
-static bool IRAM_ATTR timer_isr_callback(gptimer_handle_t timer,
-                                          const gptimer_alarm_event_data_t *edata,
-                                          void *user_ctx) {
-    (void)timer;
-    (void)edata;
-    (void)user_ctx;
-    
-    // Toggle step pin (rising edge = step)
-    if (!step_pin_state) {
-        // Rising edge - this is the actual step
-        GPIO.out_w1ts = (1UL << SPINDLE_STEP_PIN);
-        step_pin_state = true;
-        
-        // Count position based on direction
-        if (SpindleStepper::getDirection() > 0) {
-            SpindleStepper::position++;
-        } else if (SpindleStepper::getDirection() < 0) {
-            SpindleStepper::position--;
-        }
-    } else {
-        // Falling edge
-        GPIO.out_w1tc = (1UL << SPINDLE_STEP_PIN);
-        step_pin_state = false;
-    }
-    
-    return false;  // Don't yield to higher priority task
-}
+static constexpr int64_t FP_SCALE = 65536;
 
 // ============================================================================
 // Initialization
@@ -79,35 +45,14 @@ bool SpindleStepper::init() {
     
     // Note: MPG encoder is initialized separately in main.cpp
     
-    // Initialize hardware timer for step generation
-    // We'll use 1MHz resolution (1us ticks)
-    gptimer_config_t timer_config = {};
-    timer_config.clk_src = GPTIMER_CLK_SRC_DEFAULT;
-    timer_config.direction = GPTIMER_COUNT_UP;
-    timer_config.resolution_hz = 1000000;  // 1MHz = 1us resolution
-    
-    esp_err_t err = gptimer_new_timer(&timer_config, &step_timer);
-    if (err != ESP_OK) {
-        Serial.printf("[SpindleStepper] Timer create failed: %d\n", err);
+    // Initialize RMT for step generation
+    rmt_ready = rmtInit(SPINDLE_STEP_PIN, RMT_TX_MODE, RMT_MEM_NUM_BLOCKS_1, SPINDLE_RMT_RES_HZ);
+    if (!rmt_ready) {
+        Serial.println("[SpindleStepper] RMT init failed");
         return false;
     }
-    
-    // Register ISR callback
-    gptimer_event_callbacks_t cbs = {};
-    cbs.on_alarm = timer_isr_callback;
-    err = gptimer_register_event_callbacks(step_timer, &cbs, nullptr);
-    if (err != ESP_OK) {
-        Serial.printf("[SpindleStepper] Callback register failed: %d\n", err);
-        return false;
-    }
-    
-    // Enable timer
-    err = gptimer_enable(step_timer);
-    if (err != ESP_OK) {
-        Serial.printf("[SpindleStepper] Timer enable failed: %d\n", err);
-        return false;
-    }
-    
+    rmtSetEOT(SPINDLE_STEP_PIN, 0);
+
     last_update_us = micros();
     
     Serial.printf("[SpindleStepper] Initialized: %ld steps/rev, max %ld RPM\n",
@@ -153,6 +98,7 @@ void SpindleStepper::updateSpeed() {
     uint32_t now_us = micros();
     uint32_t dt_us = now_us - last_update_us;
     last_update_us = now_us;
+	last_dt_us = dt_us;
     
     // Calculate max RPM change for this update interval
     int32_t max_delta = (SPINDLE_ACCEL_RPM_PER_SEC * (int32_t)dt_us) / 1000000;
@@ -169,29 +115,108 @@ void SpindleStepper::updateSpeed() {
         if (current_rpm < rpm_target) current_rpm = rpm_target;
     }
     
-    // Update public RPM values
-    rpm_abs = current_rpm;
-    rpm_signed = current_rpm * direction;
-    
-    // Calculate step interval from RPM
+    // Calculate step period from RPM
     // steps_per_sec = (RPM / 60) * STEPS_PER_REV
-    // interval_us = 1000000 / steps_per_sec / 2  (divide by 2 for toggle timing)
+    // period_us = 1000000 / steps_per_sec
     
     if (current_rpm < SPINDLE_MIN_RPM) {
         // Stopped or too slow
-        step_interval_us = 0;
+        step_period_us = 0;
+        steps_per_sec = 0;
         running = false;
+        step_accumulator_fp = 0;
     } else {
-        int32_t steps_per_sec = ((int32_t)current_rpm * SPINDLE_STEPS_PER_REV) / 60;
-        // Divide by 2 because timer toggles (need 2 interrupts per step)
-        step_interval_us = 500000 / steps_per_sec;  // 1000000 / (steps_per_sec * 2)
-        
-        // Clamp to reasonable range
-        if (step_interval_us < 6) step_interval_us = 6;  // ~83kHz max
-        if (step_interval_us > 50000) step_interval_us = 50000;  // 10 Hz min
-        
-        running = true;
+        steps_per_sec = ((int32_t)current_rpm * SPINDLE_STEPS_PER_REV) / 60;
+        if (steps_per_sec <= 0) {
+            step_period_us = 0;
+            running = false;
+        } else {
+            uint32_t unclamped_period_us = 1000000UL / (uint32_t)steps_per_sec;
+            step_period_us = unclamped_period_us;
+            if (step_period_us < SPINDLE_MIN_STEP_PERIOD_US)
+                step_period_us = SPINDLE_MIN_STEP_PERIOD_US;
+            if (step_period_us > SPINDLE_MAX_STEP_PERIOD_US)
+                step_period_us = SPINDLE_MAX_STEP_PERIOD_US;
+            if (step_period_us != unclamped_period_us) {
+                steps_per_sec = (int32_t)(1000000UL / step_period_us);
+            }
+            running = true;
+        }
     }
+
+    // Update public RPM based on actual step rate
+    if (steps_per_sec > 0) {
+        int16_t actual_rpm = (int16_t)((steps_per_sec * 60) / SPINDLE_STEPS_PER_REV);
+        rpm_abs = actual_rpm;
+        rpm_signed = actual_rpm * direction;
+    } else {
+        rpm_abs = 0;
+        rpm_signed = 0;
+    }
+}
+
+void SpindleStepper::updateRmtLoop() {
+	static uint32_t prev_period_us = 0;
+	static bool loop_active = false;
+
+	const bool want_run = rmt_ready && running && direction != 0 && step_period_us > 0;
+
+	if (want_run) {
+		if (step_period_us != prev_period_us || !loop_active) {
+			const uint32_t tick_us = 1000000UL / SPINDLE_RMT_RES_HZ;
+			uint32_t high_us = SPINDLE_PULSE_US;
+			if (high_us < tick_us) high_us = tick_us;
+			if (high_us >= step_period_us) high_us = step_period_us - tick_us;
+			uint32_t low_us = step_period_us - high_us;
+
+			uint32_t high_ticks = (high_us + tick_us - 1) / tick_us;
+			uint32_t low_ticks = (low_us + tick_us - 1) / tick_us;
+			if (high_ticks < 1) high_ticks = 1;
+			if (low_ticks < 1) low_ticks = 1;
+			if (high_ticks > 32767) high_ticks = 32767;
+			if (low_ticks > 32767) low_ticks = 32767;
+
+			rmt_data_t symbol = {};
+			symbol.level0 = 1;
+			symbol.duration0 = (uint16_t)high_ticks;
+			symbol.level1 = 0;
+			symbol.duration1 = (uint16_t)low_ticks;
+
+			rmtWriteLooping(SPINDLE_STEP_PIN, &symbol, 1);
+			loop_active = true;
+			prev_period_us = step_period_us;
+		}
+
+		if (SPINDLE_EN_PIN >= 0) {
+			digitalWrite(SPINDLE_EN_PIN, LOW);  // Active low enable
+		}
+	} else {
+		if (loop_active) {
+			rmtWriteLooping(SPINDLE_STEP_PIN, nullptr, 0);
+			loop_active = false;
+			prev_period_us = 0;
+		}
+
+		if (SPINDLE_EN_PIN >= 0) {
+			digitalWrite(SPINDLE_EN_PIN, HIGH);  // Disabled
+		}
+	}
+}
+
+void SpindleStepper::accumulatePosition() {
+	if (!rmt_ready || direction == 0 || steps_per_sec <= 0 || last_dt_us == 0) {
+		step_accumulator_fp = 0;
+		return;
+	}
+
+	int64_t delta_fp = (int64_t)steps_per_sec * (int64_t)last_dt_us * FP_SCALE / 1000000;
+	step_accumulator_fp += delta_fp;
+
+	int32_t steps = (int32_t)(step_accumulator_fp / FP_SCALE);
+	if (steps != 0) {
+		step_accumulator_fp -= (int64_t)steps * FP_SCALE;
+		position += (direction > 0) ? steps : -steps;
+	}
 }
 
 // ============================================================================
@@ -208,60 +233,25 @@ void SpindleStepper::update() {
     bool dir_level = (direction >= 0);
     if (SPINDLE_INVERT_DIR) dir_level = !dir_level;
     digitalWrite(SPINDLE_DIR_PIN, dir_level ? HIGH : LOW);
-    
-    // Update timer alarm interval
-    static uint32_t prev_interval = 0;
-    static bool timer_running = false;
-    
-    if (step_interval_us > 0 && running) {
-        if (step_interval_us != prev_interval || !timer_running) {
-            // Stop timer, reconfigure, restart
-            if (timer_running) {
-                gptimer_stop(step_timer);
-            }
-            
-            gptimer_alarm_config_t alarm_config = {};
-            alarm_config.alarm_count = step_interval_us;
-            alarm_config.reload_count = 0;
-            alarm_config.flags.auto_reload_on_alarm = true;
-            gptimer_set_alarm_action(step_timer, &alarm_config);
-            
-            gptimer_set_raw_count(step_timer, 0);
-            gptimer_start(step_timer);
-            
-            timer_running = true;
-            prev_interval = step_interval_us;
-        }
-        
-        // Enable driver if we have an enable pin
-        if (SPINDLE_EN_PIN >= 0) {
-            digitalWrite(SPINDLE_EN_PIN, LOW);  // Active low enable
-        }
-    } else {
-        // Stop stepping
-        if (timer_running) {
-            gptimer_stop(step_timer);
-            timer_running = false;
-        }
-        
-        // Disable driver if we have an enable pin
-        if (SPINDLE_EN_PIN >= 0) {
-            digitalWrite(SPINDLE_EN_PIN, HIGH);  // Disabled
-        }
-    }
+
+    updateRmtLoop();
+    accumulatePosition();
 }
 
 // ============================================================================
 // Emergency stop
 // ============================================================================
 void SpindleStepper::stop() {
-    gptimer_stop(step_timer);
     running = false;
     current_rpm = 0;
     rpm_signed = 0;
     rpm_abs = 0;
     target_rpm = 0;
     direction = 0;
+	step_period_us = 0;
+	steps_per_sec = 0;
+	step_accumulator_fp = 0;
+	updateRmtLoop();
     
     if (SPINDLE_EN_PIN >= 0) {
         digitalWrite(SPINDLE_EN_PIN, HIGH);  // Disabled

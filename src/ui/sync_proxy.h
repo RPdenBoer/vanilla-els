@@ -13,6 +13,7 @@ public:
     static void setFromCurrentZ();
     static void setFromDisplayUm(int32_t display_um, int tool_index);
     static int32_t getDisplayUm(int tool_index);
+    static uint16_t getPhaseTicks();
 
     static int32_t getMachineUm() { return sync_z_um; }
     static bool hasValue() { return has_value; }

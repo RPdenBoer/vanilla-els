@@ -38,6 +38,11 @@ static lv_color_t endstop_active_color()
 	return lv_color_mix(lv_palette_main(LV_PALETTE_GREY), lv_palette_main(LV_PALETTE_RED), 180);
 }
 
+static lv_color_t endstop_hit_color()
+{
+	return lv_color_mix(lv_palette_main(LV_PALETTE_GREY), lv_palette_main(LV_PALETTE_GREEN), 180);
+}
+
 lv_obj_t *UIManager::lbl_x = nullptr;
 lv_obj_t *UIManager::lbl_z = nullptr;
 lv_obj_t *UIManager::lbl_c = nullptr;
@@ -64,6 +69,8 @@ bool UIManager::btn_left_long_handled = false;
 bool UIManager::btn_right_long_handled = false;
 uint32_t UIManager::btn_left_down_ms = 0;
 uint32_t UIManager::btn_right_down_ms = 0;
+bool UIManager::endstop_min_hit = false;
+bool UIManager::endstop_max_hit = false;
 
 static constexpr uint32_t ELS_LONG_PRESS_MS = 800;
 
@@ -291,24 +298,24 @@ void UIManager::createUI() {
 	lv_obj_set_style_border_color(btn_sync_ptr, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
 	lv_obj_set_style_text_color(btn_sync_ptr, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
 	lv_obj_set_style_bg_opa(btn_sync_ptr, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_CHECKED);
-	lv_obj_set_style_bg_color(btn_sync_ptr, endstop_active_color(), LV_PART_MAIN | LV_STATE_CHECKED);
-	lv_obj_set_style_border_color(btn_sync_ptr, endstop_active_color(), LV_PART_MAIN | LV_STATE_CHECKED);
-	lv_obj_set_style_text_color(btn_sync_ptr, lv_color_white(), LV_PART_MAIN | LV_STATE_CHECKED);
+	lv_obj_set_style_bg_color(btn_sync_ptr, lv_palette_darken(LV_PALETTE_GREY, 3), LV_PART_MAIN | LV_STATE_CHECKED);
+	lv_obj_set_style_border_color(btn_sync_ptr, lv_palette_darken(LV_PALETTE_GREY, 3), LV_PART_MAIN | LV_STATE_CHECKED);
+	lv_obj_set_style_text_color(btn_sync_ptr, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN | LV_STATE_CHECKED);
 	lv_obj_set_style_bg_opa(btn_sync_ptr, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_USER_1);
-	lv_obj_set_style_bg_color(btn_sync_ptr, lv_palette_darken(LV_PALETTE_ORANGE, 2), LV_PART_MAIN | LV_STATE_USER_1);
-	lv_obj_set_style_border_color(btn_sync_ptr, lv_palette_darken(LV_PALETTE_ORANGE, 2), LV_PART_MAIN | LV_STATE_USER_1);
+	lv_obj_set_style_bg_color(btn_sync_ptr, endstop_active_color(), LV_PART_MAIN | LV_STATE_USER_1);
+	lv_obj_set_style_border_color(btn_sync_ptr, endstop_active_color(), LV_PART_MAIN | LV_STATE_USER_1);
 	lv_obj_set_style_text_color(btn_sync_ptr, lv_color_white(), LV_PART_MAIN | LV_STATE_USER_1);
 	lv_obj_set_style_bg_opa(btn_sync_ptr, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_USER_1 | LV_STATE_CHECKED);
-	lv_obj_set_style_bg_color(btn_sync_ptr, lv_palette_darken(LV_PALETTE_ORANGE, 2), LV_PART_MAIN | LV_STATE_USER_1 | LV_STATE_CHECKED);
-	lv_obj_set_style_border_color(btn_sync_ptr, lv_palette_darken(LV_PALETTE_ORANGE, 2), LV_PART_MAIN | LV_STATE_USER_1 | LV_STATE_CHECKED);
+	lv_obj_set_style_bg_color(btn_sync_ptr, endstop_active_color(), LV_PART_MAIN | LV_STATE_USER_1 | LV_STATE_CHECKED);
+	lv_obj_set_style_border_color(btn_sync_ptr, endstop_active_color(), LV_PART_MAIN | LV_STATE_USER_1 | LV_STATE_CHECKED);
 	lv_obj_set_style_text_color(btn_sync_ptr, lv_color_white(), LV_PART_MAIN | LV_STATE_USER_1 | LV_STATE_CHECKED);
 	lv_obj_set_style_bg_opa(btn_sync_ptr, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_USER_2);
-	lv_obj_set_style_bg_color(btn_sync_ptr, lv_palette_darken(LV_PALETTE_GREEN, 1), LV_PART_MAIN | LV_STATE_USER_2);
-	lv_obj_set_style_border_color(btn_sync_ptr, lv_palette_darken(LV_PALETTE_GREEN, 1), LV_PART_MAIN | LV_STATE_USER_2);
+	lv_obj_set_style_bg_color(btn_sync_ptr, endstop_hit_color(), LV_PART_MAIN | LV_STATE_USER_2);
+	lv_obj_set_style_border_color(btn_sync_ptr, endstop_hit_color(), LV_PART_MAIN | LV_STATE_USER_2);
 	lv_obj_set_style_text_color(btn_sync_ptr, lv_color_white(), LV_PART_MAIN | LV_STATE_USER_2);
 	lv_obj_set_style_bg_opa(btn_sync_ptr, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_USER_2 | LV_STATE_CHECKED);
-	lv_obj_set_style_bg_color(btn_sync_ptr, lv_palette_darken(LV_PALETTE_GREEN, 1), LV_PART_MAIN | LV_STATE_USER_2 | LV_STATE_CHECKED);
-	lv_obj_set_style_border_color(btn_sync_ptr, lv_palette_darken(LV_PALETTE_GREEN, 1), LV_PART_MAIN | LV_STATE_USER_2 | LV_STATE_CHECKED);
+	lv_obj_set_style_bg_color(btn_sync_ptr, endstop_hit_color(), LV_PART_MAIN | LV_STATE_USER_2 | LV_STATE_CHECKED);
+	lv_obj_set_style_border_color(btn_sync_ptr, endstop_hit_color(), LV_PART_MAIN | LV_STATE_USER_2 | LV_STATE_CHECKED);
 	lv_obj_set_style_text_color(btn_sync_ptr, lv_color_white(), LV_PART_MAIN | LV_STATE_USER_2 | LV_STATE_CHECKED);
 	apply_button_common_style(btn_sync_ptr);
 	lv_obj_t *lbl_sync = lv_label_create(btn_sync_ptr);
@@ -342,6 +349,14 @@ void UIManager::createUI() {
 	lv_obj_set_style_bg_color(btn_endstop_min_ptr, endstop_active_color(), LV_PART_MAIN | LV_STATE_CHECKED);
 	lv_obj_set_style_border_color(btn_endstop_min_ptr, endstop_active_color(), LV_PART_MAIN | LV_STATE_CHECKED);
 	lv_obj_set_style_text_color(btn_endstop_min_ptr, lv_color_white(), LV_PART_MAIN | LV_STATE_CHECKED);
+	lv_obj_set_style_bg_opa(btn_endstop_min_ptr, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_USER_1);
+	lv_obj_set_style_bg_color(btn_endstop_min_ptr, endstop_hit_color(), LV_PART_MAIN | LV_STATE_USER_1);
+	lv_obj_set_style_border_color(btn_endstop_min_ptr, endstop_hit_color(), LV_PART_MAIN | LV_STATE_USER_1);
+	lv_obj_set_style_text_color(btn_endstop_min_ptr, lv_color_white(), LV_PART_MAIN | LV_STATE_USER_1);
+	lv_obj_set_style_bg_opa(btn_endstop_min_ptr, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_USER_1 | LV_STATE_CHECKED);
+	lv_obj_set_style_bg_color(btn_endstop_min_ptr, endstop_hit_color(), LV_PART_MAIN | LV_STATE_USER_1 | LV_STATE_CHECKED);
+	lv_obj_set_style_border_color(btn_endstop_min_ptr, endstop_hit_color(), LV_PART_MAIN | LV_STATE_USER_1 | LV_STATE_CHECKED);
+	lv_obj_set_style_text_color(btn_endstop_min_ptr, lv_color_white(), LV_PART_MAIN | LV_STATE_USER_1 | LV_STATE_CHECKED);
 	apply_button_common_style(btn_endstop_min_ptr);
 	lv_obj_t *lbl_emin = lv_label_create(btn_endstop_min_ptr);
 	lv_label_set_text(lbl_emin, "|<");
@@ -405,6 +420,14 @@ void UIManager::createUI() {
 	lv_obj_set_style_bg_color(btn_endstop_max_ptr, endstop_active_color(), LV_PART_MAIN | LV_STATE_CHECKED);
 	lv_obj_set_style_border_color(btn_endstop_max_ptr, endstop_active_color(), LV_PART_MAIN | LV_STATE_CHECKED);
 	lv_obj_set_style_text_color(btn_endstop_max_ptr, lv_color_white(), LV_PART_MAIN | LV_STATE_CHECKED);
+	lv_obj_set_style_bg_opa(btn_endstop_max_ptr, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_USER_1);
+	lv_obj_set_style_bg_color(btn_endstop_max_ptr, endstop_hit_color(), LV_PART_MAIN | LV_STATE_USER_1);
+	lv_obj_set_style_border_color(btn_endstop_max_ptr, endstop_hit_color(), LV_PART_MAIN | LV_STATE_USER_1);
+	lv_obj_set_style_text_color(btn_endstop_max_ptr, lv_color_white(), LV_PART_MAIN | LV_STATE_USER_1);
+	lv_obj_set_style_bg_opa(btn_endstop_max_ptr, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_USER_1 | LV_STATE_CHECKED);
+	lv_obj_set_style_bg_color(btn_endstop_max_ptr, endstop_hit_color(), LV_PART_MAIN | LV_STATE_USER_1 | LV_STATE_CHECKED);
+	lv_obj_set_style_border_color(btn_endstop_max_ptr, endstop_hit_color(), LV_PART_MAIN | LV_STATE_USER_1 | LV_STATE_CHECKED);
+	lv_obj_set_style_text_color(btn_endstop_max_ptr, lv_color_white(), LV_PART_MAIN | LV_STATE_USER_1 | LV_STATE_CHECKED);
 	apply_button_common_style(btn_endstop_max_ptr);
 	lv_obj_t *lbl_emax = lv_label_create(btn_endstop_max_ptr);
 	lv_label_set_text(lbl_emax, ">|");
@@ -555,7 +578,15 @@ void UIManager::update() {
     // Check bounds exceeded from motion board
     if (LeadscrewProxy::wasBoundsExceeded()) {
         LeadscrewProxy::clearBoundsExceeded();
+		const int32_t z_um = CoordinateSystem::z_raw_um;
+		if (EndstopProxy::isMinEnabled() && z_um <= EndstopProxy::getMinMachineUm()) {
+			endstop_min_hit = true;
+		}
+		if (EndstopProxy::isMaxEnabled() && z_um >= EndstopProxy::getMaxMachineUm()) {
+			endstop_max_hit = true;
+		}
         forceElsOff();
+		updateEndstopButtonStates();
     }
 
     updateJogAvailability();
@@ -727,6 +758,10 @@ void UIManager::onToggleEls(lv_event_t *e) {
 	}
 
 	els_latched = now_on;
+	if (now_on) {
+		endstop_min_hit = false;
+		endstop_max_hit = false;
+	}
     LeadscrewProxy::setEnabled(now_on);
 	LeadscrewProxy::setDirectionMul(now_on ? (int8_t)dir : 1);
 	updateJogAvailability();
@@ -776,12 +811,14 @@ void UIManager::onEditEndstopMax(lv_event_t *e) {
 void UIManager::onLongPressEndstopMin(lv_event_t *e) {
     (void)e;
     EndstopProxy::toggleMinEnabled();
+	if (!EndstopProxy::isMinEnabled()) endstop_min_hit = false;
     updateEndstopButtonStates();
 }
 
 void UIManager::onLongPressEndstopMax(lv_event_t *e) {
     (void)e;
     EndstopProxy::toggleMaxEnabled();
+	if (!EndstopProxy::isMaxEnabled()) endstop_max_hit = false;
     updateEndstopButtonStates();
 }
 
@@ -818,12 +855,18 @@ void UIManager::onLongPressC(lv_event_t *e)
 
 void UIManager::updateEndstopButtonStates() {
     if (btn_endstop_min_ptr) {
+		if (!EndstopProxy::hasMinValue() || !EndstopProxy::isMinEnabled()) endstop_min_hit = false;
         if (EndstopProxy::isMinEnabled()) lv_obj_add_state(btn_endstop_min_ptr, LV_STATE_CHECKED);
         else lv_obj_clear_state(btn_endstop_min_ptr, LV_STATE_CHECKED);
+		if (endstop_min_hit) lv_obj_add_state(btn_endstop_min_ptr, LV_STATE_USER_1);
+		else lv_obj_clear_state(btn_endstop_min_ptr, LV_STATE_USER_1);
     }
     if (btn_endstop_max_ptr) {
+		if (!EndstopProxy::hasMaxValue() || !EndstopProxy::isMaxEnabled()) endstop_max_hit = false;
         if (EndstopProxy::isMaxEnabled()) lv_obj_add_state(btn_endstop_max_ptr, LV_STATE_CHECKED);
         else lv_obj_clear_state(btn_endstop_max_ptr, LV_STATE_CHECKED);
+		if (endstop_max_hit) lv_obj_add_state(btn_endstop_max_ptr, LV_STATE_USER_1);
+		else lv_obj_clear_state(btn_endstop_max_ptr, LV_STATE_USER_1);
     }
 }
 
@@ -952,6 +995,8 @@ void UIManager::triggerElsLeft()
 		if (btn_jog_r)
 			lv_obj_clear_state(btn_jog_r, LV_STATE_CHECKED);
 		els_latched = true;
+		endstop_min_hit = false;
+		endstop_max_hit = false;
 		LeadscrewProxy::setEnabled(true);
 		LeadscrewProxy::setDirectionMul(1);
 	}
@@ -982,6 +1027,8 @@ void UIManager::triggerElsRight()
 		if (btn_jog_r)
 			lv_obj_add_state(btn_jog_r, LV_STATE_CHECKED);
 		els_latched = true;
+		endstop_min_hit = false;
+		endstop_max_hit = false;
 		LeadscrewProxy::setEnabled(true);
 		LeadscrewProxy::setDirectionMul(-1);
 	}

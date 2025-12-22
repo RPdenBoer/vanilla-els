@@ -17,6 +17,7 @@ int32_t SpiMaster::endstop_max_um = 0;
 bool SpiMaster::endstop_min_enabled = false;
 bool SpiMaster::endstop_max_enabled = false;
 int32_t SpiMaster::sync_z_um = 0;
+uint16_t SpiMaster::sync_c_ticks = 0;
 bool SpiMaster::sync_enabled = false;
 MpgModeProto SpiMaster::mpg_mode = MpgModeProto::RPM_CONTROL;
 
@@ -101,6 +102,7 @@ void SpiMaster::buildCommand(CommandPacket& cmd) {
     cmd.endstop_max_enabled = endstop_max_enabled ? 1 : 0;
 	cmd.mpg_mode = mpg_mode;
 	cmd.sync_z_um = sync_z_um;
+	cmd.sync_c_ticks = sync_c_ticks;
 	cmd.sync_enabled = sync_enabled ? 1 : 0;
 	cmd.sequence = sequence++;
 }
@@ -190,13 +192,15 @@ void SpiMaster::setEndstops(int32_t min_um, int32_t max_um, bool min_en, bool ma
     endstop_max_enabled = max_en;
 }
 
-void SpiMaster::setSync(int32_t z_um, bool enabled) {
+void SpiMaster::setSync(int32_t z_um, bool enabled, uint16_t c_ticks) {
 #if DEBUG_SPI_LOGGING
-	if (enabled != sync_enabled || z_um != sync_z_um) {
-		Serial.printf("[UI->Motion] Sync: %s @ %ld um\n", enabled ? "ON" : "OFF", z_um);
+	if (enabled != sync_enabled || z_um != sync_z_um || c_ticks != sync_c_ticks) {
+		Serial.printf("[UI->Motion] Sync: %s @ %ld um, C=%u\n",
+			enabled ? "ON" : "OFF", z_um, (unsigned)c_ticks);
 	}
 #endif
 	sync_z_um = z_um;
+	sync_c_ticks = c_ticks;
 	sync_enabled = enabled;
 }
 
