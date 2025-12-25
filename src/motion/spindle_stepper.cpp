@@ -40,8 +40,9 @@ bool SpindleStepper::init() {
     }
     
     // Configure direction switch inputs
-    pinMode(SPINDLE_FWD_PIN, INPUT_PULLUP);
-    pinMode(SPINDLE_REV_PIN, INPUT_PULLUP);
+    // Note: GPIO 36/39 are input-only and don't have internal pullups.
+    pinMode(SPINDLE_FWD_PIN, INPUT);
+    pinMode(SPINDLE_REV_PIN, INPUT);
     
     // Note: MPG encoder is initialized separately in main.cpp
     

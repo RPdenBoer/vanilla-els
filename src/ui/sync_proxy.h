@@ -3,7 +3,7 @@
 #include <stdint.h>
 
 // ============================================================================
-// SyncProxy: Manages Z sync target and state on UI
+// SyncProxy: Manages sync enable/state and reference offsets on UI
 // ============================================================================
 
 class SyncProxy {
@@ -15,7 +15,7 @@ public:
     static int32_t getDisplayUm(int tool_index);
     static uint16_t getPhaseTicks();
 
-    static int32_t getMachineUm() { return sync_z_um; }
+    static int32_t getMachineUm();
     static bool hasValue() { return has_value; }
 
     static bool isEnabled() { return enabled; }

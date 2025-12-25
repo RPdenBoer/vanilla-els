@@ -20,6 +20,8 @@ int32_t SpiMaster::sync_z_um = 0;
 uint16_t SpiMaster::sync_c_ticks = 0;
 bool SpiMaster::sync_enabled = false;
 MpgModeProto SpiMaster::mpg_mode = MpgModeProto::RPM_CONTROL;
+bool SpiMaster::jog_active = false;
+int8_t SpiMaster::jog_dir = 0;
 
 // Use HSPI for communication with motion board
 static SPIClass hspi(HSPI);
@@ -104,6 +106,8 @@ void SpiMaster::buildCommand(CommandPacket& cmd) {
 	cmd.sync_z_um = sync_z_um;
 	cmd.sync_c_ticks = sync_c_ticks;
 	cmd.sync_enabled = sync_enabled ? 1 : 0;
+	cmd.jog_dir = jog_active ? jog_dir : 0;
+	cmd.jog_active = jog_active ? 1 : 0;
 	cmd.sequence = sequence++;
 }
 
@@ -218,4 +222,22 @@ void SpiMaster::setMpgMode(MpgModeProto mode)
 	}
 #endif
 	mpg_mode = mode;
+}
+
+void SpiMaster::setJog(bool active, int8_t dir)
+{
+	int8_t new_dir = 0;
+	if (active)
+	{
+		if (dir > 0) new_dir = 1;
+		else if (dir < 0) new_dir = -1;
+	}
+#if DEBUG_SPI_LOGGING
+	if (active != jog_active || new_dir != jog_dir)
+	{
+		Serial.printf("[UI->Motion] Jog: %s dir=%d\n", active ? "ON" : "OFF", (int)new_dir);
+	}
+#endif
+	jog_active = active && (new_dir != 0);
+	jog_dir = new_dir;
 }

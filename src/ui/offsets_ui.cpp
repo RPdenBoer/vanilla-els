@@ -1,12 +1,17 @@
 #include "offsets_ui.h"
+#include <cstdio>
 
 int OffsetManager::g_offset_index = 0;
 lv_obj_t *OffsetManager::offset_btns[OFFSET_COUNT] = {0};
+lv_obj_t *OffsetManager::offset_labels[OFFSET_COUNT] = {0};
+bool OffsetManager::offset_b[OFFSET_COUNT] = {0};
 
 void OffsetManager::init() {
     g_offset_index = 0;
     for (int i = 0; i < OFFSET_COUNT; i++) {
         offset_btns[i] = nullptr;
+        offset_labels[i] = nullptr;
+        offset_b[i] = false;
     }
 }
 
@@ -18,6 +23,7 @@ void OffsetManager::setCurrentOffset(int index) {
         if (!offset_btns[i]) continue;
         if (i == index) lv_obj_add_state(offset_btns[i], LV_STATE_CHECKED);
         else lv_obj_clear_state(offset_btns[i], LV_STATE_CHECKED);
+        updateLabel(i);
     }
 }
 
@@ -28,9 +34,38 @@ void OffsetManager::onOffsetSelect(lv_event_t *e) {
     setCurrentOffset(idx);
 }
 
+void OffsetManager::onOffsetLongPress(lv_event_t *e) {
+    if (lv_event_get_code(e) != LV_EVENT_LONG_PRESSED) return;
+    int idx = (int)(intptr_t)lv_event_get_user_data(e);
+    if (idx < 0 || idx >= OFFSET_COUNT) return;
+    setCurrentOffset(idx);
+    offset_b[idx] = !offset_b[idx];
+    updateLabel(idx);
+}
+
 void OffsetManager::registerButton(int index, lv_obj_t *btn) {
     if (index < 0 || index >= OFFSET_COUNT) return;
     offset_btns[index] = btn;
+}
+
+void OffsetManager::registerLabel(int index, lv_obj_t *label) {
+    if (index < 0 || index >= OFFSET_COUNT) return;
+    offset_labels[index] = label;
+    updateLabel(index);
+}
+
+bool OffsetManager::isOffsetBActive(int index) {
+    if (index < 0 || index >= OFFSET_COUNT) return false;
+    return offset_b[index];
+}
+
+void OffsetManager::updateLabel(int index) {
+    if (index < 0 || index >= OFFSET_COUNT) return;
+    if (!offset_labels[index]) return;
+    char txt[8];
+    if (offset_b[index]) snprintf(txt, sizeof(txt), "G%dB", index + 1);
+    else snprintf(txt, sizeof(txt), "G%d", index + 1);
+    lv_label_set_text(offset_labels[index], txt);
 }
 
 int OffsetManager::getMainOffsetButtonWidth() {

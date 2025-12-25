@@ -239,7 +239,7 @@ void loop() {
             prev_endstop_max = cmd.endstop_max_um;
         }
 		if (cmd.sync_enabled != prev_sync_enabled || cmd.sync_z_um != prev_sync_z) {
-			Serial.printf("[Motion] Sync: %s @ %ld um\n",
+			Serial.printf("[Motion] Sync: %s (Z0 ref=%ld um)\n",
 				cmd.sync_enabled ? "ON" : "OFF", cmd.sync_z_um);
 			prev_sync_enabled = (cmd.sync_enabled != 0);
 			prev_sync_z = cmd.sync_z_um;
@@ -250,6 +250,7 @@ void loop() {
         ElsCore::setEnabled(els_en);
         ElsCore::setPitchUm(cmd.pitch_um);
         ElsCore::setDirectionMul(cmd.direction_mul);
+		ElsCore::setJog(cmd.jog_dir, cmd.jog_active != 0);
 		ElsCore::setSync(cmd.sync_enabled != 0, cmd.sync_z_um, cmd.sync_c_ticks);
         ElsCore::setEndstops(
             cmd.endstop_min_um, 
@@ -266,6 +267,7 @@ void loop() {
 	} else {
         // No communication - disable ELS for safety
         ElsCore::setEnabled(false);
+		ElsCore::setJog(0, false);
     }
     
     // Small delay - SPI handling doesn't need to be super fast

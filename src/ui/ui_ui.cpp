@@ -71,8 +71,16 @@ uint32_t UIManager::btn_left_down_ms = 0;
 uint32_t UIManager::btn_right_down_ms = 0;
 bool UIManager::endstop_min_hit = false;
 bool UIManager::endstop_max_hit = false;
+bool UIManager::jog_touch_left = false;
+bool UIManager::jog_touch_right = false;
+bool UIManager::jog_phys_left = false;
+bool UIManager::jog_phys_right = false;
+bool UIManager::jog_touch_left_down = false;
+bool UIManager::jog_touch_right_down = false;
+uint32_t UIManager::jog_touch_left_down_ms = 0;
+uint32_t UIManager::jog_touch_right_down_ms = 0;
 
-static constexpr uint32_t ELS_LONG_PRESS_MS = 800;
+static constexpr uint32_t JOG_PRESS_MS = 350;
 
 void UIManager::updateJogAvailability() {
 	if (!btn_jog_l || !btn_jog_r)
@@ -135,6 +143,9 @@ void UIManager::createUI() {
     lv_obj_set_style_pad_all(scr, 4, 0);
     lv_obj_set_style_pad_row(scr, 4, 0);
     lv_obj_set_style_pad_column(scr, 4, 0);
+
+	ToolManager::init();
+	OffsetManager::init();
 
     static int32_t scr_col_dsc[] = {LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
     static int32_t scr_row_dsc[] = {LV_GRID_FR(1), 48, LV_GRID_TEMPLATE_LAST};
@@ -202,6 +213,7 @@ void UIManager::createUI() {
         lv_obj_clear_flag(btn, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_add_flag(btn, LV_OBJ_FLAG_CHECKABLE);
         lv_obj_add_event_cb(btn, OffsetManager::onOffsetSelect, LV_EVENT_CLICKED, (void*)(intptr_t)i);
+		lv_obj_add_event_cb(btn, OffsetManager::onOffsetLongPress, LV_EVENT_LONG_PRESSED, (void*)(intptr_t)i);
         lv_obj_set_style_bg_opa(btn, LV_OPA_TRANSP, LV_PART_MAIN);
         lv_obj_set_style_border_width(btn, 1, LV_PART_MAIN);
         lv_obj_set_style_border_color(btn, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
@@ -216,6 +228,7 @@ void UIManager::createUI() {
         char txt[8]; snprintf(txt, sizeof(txt), "G%d", i + 1);
         lv_label_set_text(lbl, txt);
         lv_obj_center(lbl);
+		OffsetManager::registerLabel(i, lbl);
     }
 
     // Units + pitch mode row
@@ -368,8 +381,10 @@ void UIManager::createUI() {
 	lv_obj_set_height(btn_jog_l, LV_PCT(100));
 	lv_obj_set_flex_grow(btn_jog_l, 1);
 	lv_obj_clear_flag(btn_jog_l, LV_OBJ_FLAG_SCROLLABLE);
-	lv_obj_add_flag(btn_jog_l, LV_OBJ_FLAG_CHECKABLE);
-	lv_obj_add_event_cb(btn_jog_l, onToggleEls, LV_EVENT_CLICKED, (void *)(intptr_t)1);
+	lv_obj_add_event_cb(btn_jog_l, onJogPress, LV_EVENT_PRESSED, (void *)(intptr_t)1);
+	lv_obj_add_event_cb(btn_jog_l, onJogPressing, LV_EVENT_PRESSING, (void *)(intptr_t)1);
+	lv_obj_add_event_cb(btn_jog_l, onJogRelease, LV_EVENT_RELEASED, (void *)(intptr_t)1);
+	lv_obj_add_event_cb(btn_jog_l, onJogRelease, LV_EVENT_PRESS_LOST, (void *)(intptr_t)1);
 	lv_obj_set_style_bg_opa(btn_jog_l, LV_OPA_COVER, LV_PART_MAIN);
 	lv_obj_set_style_bg_color(btn_jog_l, lv_palette_darken(LV_PALETTE_GREEN, 2), LV_PART_MAIN);
 	lv_obj_set_style_border_width(btn_jog_l, 1, LV_PART_MAIN);
@@ -389,8 +404,10 @@ void UIManager::createUI() {
 	lv_obj_set_height(btn_jog_r, LV_PCT(100));
 	lv_obj_set_flex_grow(btn_jog_r, 1);
 	lv_obj_clear_flag(btn_jog_r, LV_OBJ_FLAG_SCROLLABLE);
-	lv_obj_add_flag(btn_jog_r, LV_OBJ_FLAG_CHECKABLE);
-	lv_obj_add_event_cb(btn_jog_r, onToggleEls, LV_EVENT_CLICKED, (void *)(intptr_t)-1);
+	lv_obj_add_event_cb(btn_jog_r, onJogPress, LV_EVENT_PRESSED, (void *)(intptr_t)-1);
+	lv_obj_add_event_cb(btn_jog_r, onJogPressing, LV_EVENT_PRESSING, (void *)(intptr_t)-1);
+	lv_obj_add_event_cb(btn_jog_r, onJogRelease, LV_EVENT_RELEASED, (void *)(intptr_t)-1);
+	lv_obj_add_event_cb(btn_jog_r, onJogRelease, LV_EVENT_PRESS_LOST, (void *)(intptr_t)-1);
 	lv_obj_set_style_bg_opa(btn_jog_r, LV_OPA_COVER, LV_PART_MAIN);
 	lv_obj_set_style_bg_color(btn_jog_r, lv_palette_darken(LV_PALETTE_GREEN, 2), LV_PART_MAIN);
 	lv_obj_set_style_border_width(btn_jog_r, 1, LV_PART_MAIN);
@@ -460,6 +477,7 @@ void UIManager::createUI() {
         lv_obj_clear_flag(btn, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_add_flag(btn, LV_OBJ_FLAG_CHECKABLE);
         lv_obj_add_event_cb(btn, ToolManager::onToolSelect, LV_EVENT_CLICKED, (void*)(intptr_t)i);
+		lv_obj_add_event_cb(btn, ToolManager::onToolLongPress, LV_EVENT_LONG_PRESSED, (void*)(intptr_t)i);
         lv_obj_set_style_bg_opa(btn, LV_OPA_TRANSP, LV_PART_MAIN);
         lv_obj_set_style_border_width(btn, 1, LV_PART_MAIN);
         lv_obj_set_style_border_color(btn, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
@@ -474,10 +492,11 @@ void UIManager::createUI() {
         char txt[8]; snprintf(txt, sizeof(txt), "T%d", i + 1);
         lv_label_set_text(lbl, txt);
         lv_obj_center(lbl);
+		ToolManager::registerLabel(i, lbl);
     }
 
-    ToolManager::setCurrentTool(0);
-    OffsetManager::setCurrentOffset(0);
+    ToolManager::setCurrentTool(ToolManager::getCurrentTool());
+    OffsetManager::setCurrentOffset(OffsetManager::getCurrentOffset());
     updateJogAvailability();
 }
 
@@ -703,7 +722,8 @@ void UIManager::onEditSync(lv_event_t *e)
 {
 	if (lv_event_get_code(e) != LV_EVENT_SHORT_CLICKED)
 		return;
-	ModalManager::showSyncModal();
+	SyncProxy::toggleEnabled();
+	updateSyncButtonStates();
 }
 
 void UIManager::onTogglePitchMode(lv_event_t *e) {
@@ -719,10 +739,8 @@ void UIManager::onLongPressSync(lv_event_t *e)
 	updateSyncButtonStates();
 }
 
-void UIManager::onToggleEls(lv_event_t *e) {
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-	lv_obj_t *btn = (lv_obj_t *)lv_event_get_target(e);
-	const int dir = (int)(intptr_t)lv_event_get_user_data(e);
+void UIManager::toggleElsInternal(lv_obj_t *btn, int dir)
+{
 	if (!els_latched && SpiMaster::getMpgMode() == MpgModeProto::JOG_Z)
 	{
 		lv_obj_clear_state(btn_jog_l, LV_STATE_CHECKED);
@@ -734,7 +752,6 @@ void UIManager::onToggleEls(lv_event_t *e) {
 	// If ELS is currently running, pressing either button turns it off (e-stop)
 	if (els_latched)
 	{
-		// Turn off - clear both buttons
 		lv_obj_clear_state(btn_jog_l, LV_STATE_CHECKED);
 		lv_obj_clear_state(btn_jog_r, LV_STATE_CHECKED);
 		els_latched = false;
@@ -745,31 +762,98 @@ void UIManager::onToggleEls(lv_event_t *e) {
 	}
 
 	// ELS is off - turn it on with the specified direction
-	const bool now_on = lv_obj_has_state(btn, LV_STATE_CHECKED);
+	lv_obj_t *other = (btn == btn_jog_l) ? btn_jog_r : btn_jog_l;
+	if (btn)
+		lv_obj_add_state(btn, LV_STATE_CHECKED);
+	if (other)
+		lv_obj_clear_state(other, LV_STATE_CHECKED);
 
-	// If turning on this button, turn off the other
-	if (now_on)
-	{
-		lv_obj_t *other = (btn == btn_jog_l) ? btn_jog_r : btn_jog_l;
-		if (other && lv_obj_has_state(other, LV_STATE_CHECKED))
-		{
-			lv_obj_clear_state(other, LV_STATE_CHECKED);
-		}
-	}
-
-	els_latched = now_on;
-	if (now_on) {
-		endstop_min_hit = false;
-		endstop_max_hit = false;
-	}
-    LeadscrewProxy::setEnabled(now_on);
-	LeadscrewProxy::setDirectionMul(now_on ? (int8_t)dir : 1);
+	els_latched = true;
+	endstop_min_hit = false;
+	endstop_max_hit = false;
+	LeadscrewProxy::setEnabled(true);
+	LeadscrewProxy::setDirectionMul((int8_t)dir);
 	updateJogAvailability();
 }
 
-void UIManager::onJog(lv_event_t *e) {
-	// Unused - kept for potential future use
-	(void)e;
+void UIManager::onToggleEls(lv_event_t *e) {
+    if (lv_event_get_code(e) != LV_EVENT_SHORT_CLICKED) return;
+	lv_obj_t *btn = (lv_obj_t *)lv_event_get_target(e);
+	const int dir = (int)(intptr_t)lv_event_get_user_data(e);
+	toggleElsInternal(btn, dir);
+}
+
+void UIManager::onJogPress(lv_event_t *e) {
+	if (lv_event_get_code(e) != LV_EVENT_PRESSED) return;
+	const int dir = (int)(intptr_t)lv_event_get_user_data(e);
+	const uint32_t now = millis();
+	if (dir > 0) {
+		jog_touch_left_down = true;
+		jog_touch_left_down_ms = now;
+	} else if (dir < 0) {
+		jog_touch_right_down = true;
+		jog_touch_right_down_ms = now;
+	}
+}
+
+void UIManager::onJogPressing(lv_event_t *e) {
+	if (lv_event_get_code(e) != LV_EVENT_PRESSING) return;
+	const int dir = (int)(intptr_t)lv_event_get_user_data(e);
+	const uint32_t now = millis();
+	if (dir > 0)
+	{
+		if (!jog_touch_left_down)
+			return;
+		if (!jog_touch_left && (now - jog_touch_left_down_ms >= JOG_PRESS_MS))
+		{
+			jog_touch_left = true;
+			forceElsOff();
+			if (btn_jog_l)
+				lv_obj_add_state(btn_jog_l, LV_STATE_CHECKED);
+			updateJogAvailability();
+		}
+	}
+	else if (dir < 0)
+	{
+		if (!jog_touch_right_down)
+			return;
+		if (!jog_touch_right && (now - jog_touch_right_down_ms >= JOG_PRESS_MS))
+		{
+			jog_touch_right = true;
+			forceElsOff();
+			if (btn_jog_r)
+				lv_obj_add_state(btn_jog_r, LV_STATE_CHECKED);
+			updateJogAvailability();
+		}
+	}
+}
+
+void UIManager::onJogRelease(lv_event_t *e) {
+	const lv_event_code_t code = lv_event_get_code(e);
+	if (code != LV_EVENT_RELEASED && code != LV_EVENT_PRESS_LOST) return;
+	lv_obj_t *btn = (lv_obj_t *)lv_event_get_target(e);
+	const int dir = (int)(intptr_t)lv_event_get_user_data(e);
+	const uint32_t now = millis();
+	if (dir > 0) {
+		const uint32_t held_ms = now - jog_touch_left_down_ms;
+		jog_touch_left_down = false;
+		jog_touch_left = false;
+		if (btn_jog_l)
+			lv_obj_clear_state(btn_jog_l, LV_STATE_CHECKED);
+		updateJogAvailability();
+		if (held_ms >= JOG_PRESS_MS)
+			return;
+	} else if (dir < 0) {
+		const uint32_t held_ms = now - jog_touch_right_down_ms;
+		jog_touch_right_down = false;
+		jog_touch_right = false;
+		if (btn_jog_r)
+			lv_obj_clear_state(btn_jog_r, LV_STATE_CHECKED);
+		updateJogAvailability();
+		if (held_ms >= JOG_PRESS_MS)
+			return;
+	}
+	toggleElsInternal(btn, dir);
 }
 
 void UIManager::onZeroX(lv_event_t *e) { (void)e; ModalManager::showOffsetModal(AXIS_X); }
@@ -907,6 +991,20 @@ void UIManager::setElsButtonActive(bool active)
 	(void)active;
 }
 
+bool UIManager::isJogActive()
+{
+	return getJogDir() != 0;
+}
+
+int8_t UIManager::getJogDir()
+{
+	const bool left = jog_touch_left || jog_phys_left;
+	const bool right = jog_touch_right || jog_phys_right;
+	if (left == right)
+		return 0;
+	return left ? 1 : -1;
+}
+
 void UIManager::initPhysicalButtons()
 {
 	pinMode(ELS_BTN_LEFT_PIN, INPUT_PULLUP);
@@ -917,6 +1015,14 @@ void UIManager::initPhysicalButtons()
 	btn_right_long_handled = false;
 	btn_left_down_ms = 0;
 	btn_right_down_ms = 0;
+	jog_touch_left = false;
+	jog_touch_right = false;
+	jog_phys_left = false;
+	jog_phys_right = false;
+	jog_touch_left_down = false;
+	jog_touch_right_down = false;
+	jog_touch_left_down_ms = 0;
+	jog_touch_right_down_ms = 0;
 	Serial.printf("[UI] Physical buttons init: L=%d, R=%d\\n", ELS_BTN_LEFT_PIN, ELS_BTN_RIGHT_PIN);
 }
 
@@ -932,20 +1038,30 @@ void UIManager::pollPhysicalButtons()
 		btn_left_down_ms = now;
 		btn_left_long_handled = false;
 	}
-	if (btn_left_down && !btn_left && !btn_left_long_handled)
+	if (btn_left_down && btn_left && !btn_left_long_handled &&
+		(now - btn_left_down_ms >= JOG_PRESS_MS))
 	{
-		btn_left_down = false;
-		triggerElsLeft();
-	}
-	else if (btn_left_down && !btn_left)
-	{
-		btn_left_down = false;
-	}
-	if (btn_left_down && !btn_left_long_handled && (now - btn_left_down_ms >= ELS_LONG_PRESS_MS))
-	{
-		EndstopProxy::setMinFromCurrentZ();
-		updateEndstopButtonStates();
 		btn_left_long_handled = true;
+		jog_phys_left = true;
+		forceElsOff();
+		if (btn_jog_l)
+			lv_obj_add_state(btn_jog_l, LV_STATE_CHECKED);
+		updateJogAvailability();
+	}
+	if (btn_left_down && !btn_left)
+	{
+		btn_left_down = false;
+		if (btn_left_long_handled)
+		{
+			jog_phys_left = false;
+			if (btn_jog_l)
+				lv_obj_clear_state(btn_jog_l, LV_STATE_CHECKED);
+			updateJogAvailability();
+		}
+		else
+		{
+			triggerElsLeft();
+		}
 	}
 
 	if (btn_right && !btn_right_down)
@@ -954,85 +1070,41 @@ void UIManager::pollPhysicalButtons()
 		btn_right_down_ms = now;
 		btn_right_long_handled = false;
 	}
-	if (btn_right_down && !btn_right && !btn_right_long_handled)
+	if (btn_right_down && btn_right && !btn_right_long_handled &&
+		(now - btn_right_down_ms >= JOG_PRESS_MS))
 	{
-		btn_right_down = false;
-		triggerElsRight();
-	}
-	else if (btn_right_down && !btn_right)
-	{
-		btn_right_down = false;
-	}
-	if (btn_right_down && !btn_right_long_handled && (now - btn_right_down_ms >= ELS_LONG_PRESS_MS))
-	{
-		EndstopProxy::setMaxFromCurrentZ();
-		updateEndstopButtonStates();
 		btn_right_long_handled = true;
+		jog_phys_right = true;
+		forceElsOff();
+		if (btn_jog_r)
+			lv_obj_add_state(btn_jog_r, LV_STATE_CHECKED);
+		updateJogAvailability();
+	}
+	if (btn_right_down && !btn_right)
+	{
+		btn_right_down = false;
+		if (btn_right_long_handled)
+		{
+			jog_phys_right = false;
+			if (btn_jog_r)
+				lv_obj_clear_state(btn_jog_r, LV_STATE_CHECKED);
+			updateJogAvailability();
+		}
+		else
+		{
+			triggerElsRight();
+		}
 	}
 }
 
 void UIManager::triggerElsLeft()
 {
-	if (!els_latched && SpiMaster::getMpgMode() == MpgModeProto::JOG_Z)
-		return;
-	// Same logic as pressing the left ELS button
-	if (els_latched)
-	{
-		// E-stop: turn off ELS
-		if (btn_jog_l)
-			lv_obj_clear_state(btn_jog_l, LV_STATE_CHECKED);
-		if (btn_jog_r)
-			lv_obj_clear_state(btn_jog_r, LV_STATE_CHECKED);
-		els_latched = false;
-		LeadscrewProxy::setEnabled(false);
-		LeadscrewProxy::setDirectionMul(1);
-	}
-	else
-	{
-		// Turn on ELS with positive direction
-		if (btn_jog_l)
-			lv_obj_add_state(btn_jog_l, LV_STATE_CHECKED);
-		if (btn_jog_r)
-			lv_obj_clear_state(btn_jog_r, LV_STATE_CHECKED);
-		els_latched = true;
-		endstop_min_hit = false;
-		endstop_max_hit = false;
-		LeadscrewProxy::setEnabled(true);
-		LeadscrewProxy::setDirectionMul(1);
-	}
-	updateJogAvailability();
+	toggleElsInternal(btn_jog_l, 1);
 }
 
 void UIManager::triggerElsRight()
 {
-	if (!els_latched && SpiMaster::getMpgMode() == MpgModeProto::JOG_Z)
-		return;
-	// Same logic as pressing the right ELS button
-	if (els_latched)
-	{
-		// E-stop: turn off ELS
-		if (btn_jog_l)
-			lv_obj_clear_state(btn_jog_l, LV_STATE_CHECKED);
-		if (btn_jog_r)
-			lv_obj_clear_state(btn_jog_r, LV_STATE_CHECKED);
-		els_latched = false;
-		LeadscrewProxy::setEnabled(false);
-		LeadscrewProxy::setDirectionMul(1);
-	}
-	else
-	{
-		// Turn on ELS with negative direction
-		if (btn_jog_l)
-			lv_obj_clear_state(btn_jog_l, LV_STATE_CHECKED);
-		if (btn_jog_r)
-			lv_obj_add_state(btn_jog_r, LV_STATE_CHECKED);
-		els_latched = true;
-		endstop_min_hit = false;
-		endstop_max_hit = false;
-		LeadscrewProxy::setEnabled(true);
-		LeadscrewProxy::setDirectionMul(-1);
-	}
-	updateJogAvailability();
+	toggleElsInternal(btn_jog_r, -1);
 }
 
 // Global function for modal callback

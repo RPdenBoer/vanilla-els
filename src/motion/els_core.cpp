@@ -30,15 +30,18 @@ int8_t ElsCore::direction_mul = 1;
 
 bool ElsCore::sync_enabled = false;
 bool ElsCore::sync_waiting = false;
-bool ElsCore::sync_armed = true;
 bool ElsCore::sync_in = false;
 int32_t ElsCore::sync_z_um = 0;
 int32_t ElsCore::sync_phase_ticks = 0;
-int32_t ElsCore::sync_tolerance_um = 10;
 int32_t ElsCore::sync_tolerance_out_um = 25;
 int32_t ElsCore::sync_ref_z_um = 0;
 int32_t ElsCore::sync_ref_spindle = 0;
 int32_t ElsCore::last_z_um = 0;
+volatile bool ElsCore::jog_active = false;
+volatile int8_t ElsCore::jog_dir = 0;
+bool ElsCore::jog_prev_active = false;
+uint32_t ElsCore::jog_last_us = 0;
+int64_t ElsCore::jog_step_accumulator = 0;
 
 int32_t ElsCore::endstop_min_um = INT32_MIN;
 int32_t ElsCore::endstop_max_um = INT32_MAX;
@@ -50,6 +53,9 @@ int64_t ElsCore::step_accumulator = 0;
 
 // Fixed-point scale for sub-step precision (16 fractional bits)
 static constexpr int64_t FP_SCALE = 65536;
+static constexpr int64_t JOG_STEPS_PER_US_FP =
+	(int64_t)ELS_JOG_MM_PER_MIN * 1000LL * (int64_t)ELS_STEPS_PER_REV * FP_SCALE /
+	(60LL * 1000000LL * (int64_t)ELS_LEADSCREW_PITCH_UM);
 
 static inline int32_t wrap_phase(int32_t count) {
 	int32_t r = count % C_COUNTS_PER_REV;
@@ -85,11 +91,15 @@ void ElsCore::init() {
 	step_accumulator = 0;
 	sync_enabled = false;
 	sync_waiting = false;
-	sync_armed = true;
 	sync_in = false;
 	sync_ref_z_um = 0;
 	sync_ref_spindle = 0;
 	last_z_um = EncoderMotion::getZCount() * Z_UM_PER_COUNT;
+	jog_active = false;
+	jog_dir = 0;
+	jog_prev_active = false;
+	jog_last_us = 0;
+	jog_step_accumulator = 0;
 }
 
 void ElsCore::setEnabled(bool on) {
@@ -105,16 +115,41 @@ void ElsCore::setEnabled(bool on) {
 	if (!enabled) {
 		sync_waiting = false;
 		sync_in = false;
-		sync_armed = true;
+	} else if (sync_enabled) {
+		sync_waiting = true;
+		sync_in = false;
 	}
 }
 
 void ElsCore::setPitchUm(int32_t pitch) {
+    if (pitch == pitch_um) return;
     pitch_um = pitch;
+	if (sync_enabled && enabled) {
+		sync_waiting = true;
+		sync_in = false;
+	}
 }
 
 void ElsCore::setDirectionMul(int8_t mul) {
-    direction_mul = (mul < 0) ? -1 : 1;
+    int8_t new_mul = (mul < 0) ? -1 : 1;
+	if (new_mul == direction_mul) return;
+    direction_mul = new_mul;
+	if (sync_enabled && enabled) {
+		sync_waiting = true;
+		sync_in = false;
+	}
+}
+
+void ElsCore::setJog(int8_t dir, bool active)
+{
+	int8_t new_dir = 0;
+	if (active)
+	{
+		if (dir > 0) new_dir = 1;
+		else if (dir < 0) new_dir = -1;
+	}
+	jog_dir = new_dir;
+	jog_active = active && (new_dir != 0);
 }
 
 void ElsCore::setSync(bool enabled, int32_t z_um, int32_t c_ticks) {
@@ -126,14 +161,12 @@ void ElsCore::setSync(bool enabled, int32_t z_um, int32_t c_ticks) {
 	sync_phase_ticks = c_ticks;
 	if (!sync_enabled) {
 		sync_waiting = false;
-		sync_armed = false;
 		sync_in = false;
 		return;
 	}
 	if (!was_enabled || prev_z != z_um || prev_phase != c_ticks) {
-		sync_waiting = false;
-		sync_armed = false;
 		sync_in = false;
+		sync_waiting = ElsCore::enabled;
 	}
 }
 
@@ -155,6 +188,60 @@ bool ElsCore::checkEndstops(int32_t z_um) {
 }
 
 void ElsCore::update() {
+	const bool jog_active_now = jog_active;
+	const int8_t jog_dir_now = jog_dir;
+	if (jog_active_now && jog_dir_now != 0)
+	{
+		if (!jog_prev_active)
+		{
+			jog_prev_active = true;
+			jog_last_us = micros();
+			jog_step_accumulator = 0;
+			last_spindle_count = getSpindlePosition();
+			last_z_um = EncoderMotion::getZCount() * Z_UM_PER_COUNT;
+			step_accumulator = 0;
+			if (sync_enabled)
+			{
+				sync_waiting = true;
+				sync_in = false;
+			}
+		}
+
+		const uint32_t now_us = micros();
+		const uint32_t dt_us = now_us - jog_last_us;
+		jog_last_us = now_us;
+
+		if (dt_us > 0 && JOG_STEPS_PER_US_FP > 0)
+		{
+			const int64_t step_delta_fp = (int64_t)dt_us * JOG_STEPS_PER_US_FP;
+			jog_step_accumulator += step_delta_fp;
+
+			int32_t steps_to_output = (int32_t)(jog_step_accumulator / FP_SCALE);
+			if (steps_to_output != 0)
+			{
+				if (steps_to_output > ELS_MAX_STEPS_PER_CYCLE)
+					steps_to_output = ELS_MAX_STEPS_PER_CYCLE;
+				jog_step_accumulator -= (int64_t)steps_to_output * FP_SCALE;
+				Stepper::step(steps_to_output * (int32_t)jog_dir_now);
+			}
+		}
+		return;
+	}
+
+	if (jog_prev_active)
+	{
+		jog_prev_active = false;
+		jog_step_accumulator = 0;
+		last_spindle_count = getSpindlePosition();
+		last_z_um = EncoderMotion::getZCount() * Z_UM_PER_COUNT;
+		step_accumulator = 0;
+		if (sync_enabled && enabled)
+		{
+			sync_waiting = true;
+			sync_in = false;
+		}
+	}
+
     if (!enabled) return;
 
 	// Get current spindle position (from encoder or stepper, depending on mode)
@@ -162,34 +249,36 @@ void ElsCore::update() {
 	const int32_t z_um = EncoderMotion::getZCount() * Z_UM_PER_COUNT;
 
 	if (sync_enabled) {
-		const int32_t z_delta = z_um - sync_z_um;
-		const int32_t abs_z_delta = (z_delta < 0) ? -z_delta : z_delta;
-		const bool z_in_window = (abs_z_delta <= sync_tolerance_um);
-
 		if (sync_waiting) {
-			if (!crossed_phase(last_spindle_count, spindle_count, sync_phase_ticks)) {
-				last_spindle_count = spindle_count;
-				last_z_um = z_um;
-				return;
-			}
-			sync_waiting = false;
-			sync_in = true;
-			sync_ref_z_um = z_um;
-			sync_ref_spindle = spindle_count;
-			last_spindle_count = spindle_count;
-			step_accumulator = 0;
-		} else {
-			if (!z_in_window) {
-				sync_armed = true;
-			} else if (sync_armed) {
-				sync_waiting = true;
-				sync_armed = false;
+			if (pitch_um == 0) {
+				sync_waiting = false;
 				sync_in = false;
+			} else {
+				const int64_t phase_num = (int64_t)(z_um - sync_z_um) *
+										  (int64_t)C_COUNTS_PER_REV *
+										  (int64_t)direction_mul;
+				const int32_t phase_delta = (int32_t)(phase_num / (int64_t)pitch_um);
+				const int32_t target_phase = wrap_phase(sync_phase_ticks + phase_delta);
+				const int32_t current_phase = wrap_phase(spindle_count);
+				if (current_phase != target_phase &&
+					!crossed_phase(last_spindle_count, spindle_count, target_phase)) {
+					last_spindle_count = spindle_count;
+					last_z_um = z_um;
+					return;
+				}
+				sync_waiting = false;
+				sync_in = true;
+				sync_ref_z_um = z_um;
+				sync_ref_spindle = spindle_count;
 				last_spindle_count = spindle_count;
 				step_accumulator = 0;
-				last_z_um = z_um;
-				return;
 			}
+		} else if (!sync_in) {
+			sync_waiting = true;
+			last_spindle_count = spindle_count;
+			last_z_um = z_um;
+			step_accumulator = 0;
+			return;
 		}
 
 		if (sync_in) {
@@ -200,7 +289,11 @@ void ElsCore::update() {
 			const int32_t abs_err = (err < 0) ? -err : err;
 			if (abs_err > sync_tolerance_out_um) {
 				sync_in = false;
-				sync_armed = true;
+				sync_waiting = true;
+				last_spindle_count = spindle_count;
+				last_z_um = z_um;
+				step_accumulator = 0;
+				return;
 			}
 		}
 	}

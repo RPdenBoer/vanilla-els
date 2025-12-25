@@ -377,7 +377,11 @@ void ModalManager::showOffsetModal(AxisSel axis) {
     lv_obj_add_event_cb(btn_t, onSetTool, LV_EVENT_CLICKED, nullptr);
     lv_obj_set_style_bg_color(btn_t, lv_palette_darken(LV_PALETTE_ORANGE, 2), LV_PART_MAIN);
     lv_obj_set_style_text_color(btn_t, lv_color_white(), LV_PART_MAIN);
-    char ttxt[8]; snprintf(ttxt, sizeof(ttxt), "T%d", ToolManager::getCurrentTool() + 1);
+    char ttxt[8];
+    if (ToolManager::isToolBActive(ToolManager::getCurrentTool()))
+        snprintf(ttxt, sizeof(ttxt), "T%dB", ToolManager::getCurrentTool() + 1);
+    else
+        snprintf(ttxt, sizeof(ttxt), "T%d", ToolManager::getCurrentTool() + 1);
     lv_obj_t *lblt = lv_label_create(btn_t);
     lv_label_set_text(lblt, ttxt);
     lv_obj_center(lblt);
@@ -389,7 +393,11 @@ void ModalManager::showOffsetModal(AxisSel axis) {
     lv_obj_add_event_cb(btn_g, onSetGlobal, LV_EVENT_CLICKED, nullptr);
     lv_obj_set_style_bg_color(btn_g, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_MAIN);
     lv_obj_set_style_text_color(btn_g, lv_color_white(), LV_PART_MAIN);
-    char gtxt[8]; snprintf(gtxt, sizeof(gtxt), "G%d", OffsetManager::getCurrentOffset() + 1);
+    char gtxt[8];
+    if (OffsetManager::isOffsetBActive(OffsetManager::getCurrentOffset()))
+        snprintf(gtxt, sizeof(gtxt), "G%dB", OffsetManager::getCurrentOffset() + 1);
+    else
+        snprintf(gtxt, sizeof(gtxt), "G%d", OffsetManager::getCurrentOffset() + 1);
     lv_obj_t *lblg = lv_label_create(btn_g);
     lv_label_set_text(lblg, gtxt);
     lv_obj_center(lblg);
@@ -642,26 +650,28 @@ void ModalManager::applyToolOffset() {
     const int tool = ToolManager::getCurrentTool();
     int off = OffsetManager::getCurrentOffset();
     if (off < 0 || off >= OFFSET_COUNT) off = 0;
+    const int tool_b = ToolManager::isToolBActive(tool) ? 1 : 0;
+    const int off_b = OffsetManager::isOffsetBActive(off) ? 1 : 0;
 
     if (active_axis == AXIS_X) {
         int32_t target_um = 0;
         if (!parse_linear_expression_to_um(txt, &target_um))
             CoordinateSystem::parseLinearToUm(txt, &target_um);
         int32_t target_machine_um = CoordinateSystem::xUserToMachineUm(target_um);
-        CoordinateSystem::x_tool_um[tool] = CoordinateSystem::x_raw_um - CoordinateSystem::x_global_um[off] - target_machine_um;
+        CoordinateSystem::x_tool_um[tool][tool_b] = CoordinateSystem::x_raw_um - CoordinateSystem::x_global_um[off][off_b] - target_machine_um;
     } else if (active_axis == AXIS_Z) {
         int32_t target_um = 0;
         if (!parse_linear_expression_to_um(txt, &target_um))
             CoordinateSystem::parseLinearToUm(txt, &target_um);
         int32_t target_machine_um = CoordinateSystem::zUserToMachineUm(target_um);
-        CoordinateSystem::z_tool_um[tool] = CoordinateSystem::z_raw_um - CoordinateSystem::z_global_um[off] - target_machine_um;
+        CoordinateSystem::z_tool_um[tool][tool_b] = CoordinateSystem::z_raw_um - CoordinateSystem::z_global_um[off][off_b] - target_machine_um;
     } else {
         int32_t target_deg_x100 = 0;
         if (!parse_deg_expression_to_degx100(txt, &target_deg_x100))
             CoordinateSystem::parseDegToDegX100(txt, &target_deg_x100);
         int32_t target_ticks = CoordinateSystem::degX100ToTicks(target_deg_x100);
         int32_t raw = CoordinateSystem::wrap01599(EncoderProxy::getRawTicks());
-        CoordinateSystem::c_tool_ticks[tool] = CoordinateSystem::wrap01599(raw - CoordinateSystem::c_global_ticks[off] - target_ticks);
+        CoordinateSystem::c_tool_ticks[tool][tool_b] = CoordinateSystem::wrap01599(raw - CoordinateSystem::c_global_ticks[off][off_b] - target_ticks);
     }
     CoordinateSystem::saveToolOffsets();
 }
@@ -672,26 +682,28 @@ void ModalManager::applyGlobalOffset() {
     const int tool = ToolManager::getCurrentTool();
     int off = OffsetManager::getCurrentOffset();
     if (off < 0 || off >= OFFSET_COUNT) off = 0;
+    const int tool_b = ToolManager::isToolBActive(tool) ? 1 : 0;
+    const int off_b = OffsetManager::isOffsetBActive(off) ? 1 : 0;
 
     if (active_axis == AXIS_X) {
         int32_t target_um = 0;
         if (!parse_linear_expression_to_um(txt, &target_um))
             CoordinateSystem::parseLinearToUm(txt, &target_um);
         int32_t target_machine_um = CoordinateSystem::xUserToMachineUm(target_um);
-        CoordinateSystem::x_global_um[off] = CoordinateSystem::x_raw_um - CoordinateSystem::x_tool_um[tool] - target_machine_um;
+        CoordinateSystem::x_global_um[off][off_b] = CoordinateSystem::x_raw_um - CoordinateSystem::x_tool_um[tool][tool_b] - target_machine_um;
     } else if (active_axis == AXIS_Z) {
         int32_t target_um = 0;
         if (!parse_linear_expression_to_um(txt, &target_um))
             CoordinateSystem::parseLinearToUm(txt, &target_um);
         int32_t target_machine_um = CoordinateSystem::zUserToMachineUm(target_um);
-        CoordinateSystem::z_global_um[off] = CoordinateSystem::z_raw_um - CoordinateSystem::z_tool_um[tool] - target_machine_um;
+        CoordinateSystem::z_global_um[off][off_b] = CoordinateSystem::z_raw_um - CoordinateSystem::z_tool_um[tool][tool_b] - target_machine_um;
     } else {
         int32_t target_deg_x100 = 0;
         if (!parse_deg_expression_to_degx100(txt, &target_deg_x100))
             CoordinateSystem::parseDegToDegX100(txt, &target_deg_x100);
         int32_t target_ticks = CoordinateSystem::degX100ToTicks(target_deg_x100);
         int32_t raw = CoordinateSystem::wrap01599(EncoderProxy::getRawTicks());
-        CoordinateSystem::c_global_ticks[off] = CoordinateSystem::wrap01599(raw - CoordinateSystem::c_tool_ticks[tool] - target_ticks);
+        CoordinateSystem::c_global_ticks[off][off_b] = CoordinateSystem::wrap01599(raw - CoordinateSystem::c_tool_ticks[tool][tool_b] - target_ticks);
     }
 }
 

@@ -7,20 +7,21 @@
 
 class CoordinateSystem {
 public:
+    static constexpr int OFFSET_VARIANTS = 2;
     // Raw values from motion board (microns for linear, ticks for rotary)
     static int32_t x_raw_um;
     static int32_t z_raw_um;
     static int32_t c_raw_ticks;
     
     // Work offsets (G54/G55 style), indexed by OffsetManager's current offset
-    static int32_t x_global_um[OFFSET_COUNT];
-    static int32_t z_global_um[OFFSET_COUNT];
-    static int32_t c_global_ticks[OFFSET_COUNT];
+    static int32_t x_global_um[OFFSET_COUNT][OFFSET_VARIANTS];
+    static int32_t z_global_um[OFFSET_COUNT][OFFSET_VARIANTS];
+    static int32_t c_global_ticks[OFFSET_COUNT][OFFSET_VARIANTS];
     
     // Tool offsets (indexed by tool number)
-    static int32_t x_tool_um[TOOL_COUNT];
-    static int32_t z_tool_um[TOOL_COUNT];
-    static int32_t c_tool_ticks[TOOL_COUNT];
+    static int32_t x_tool_um[TOOL_COUNT][OFFSET_VARIANTS];
+    static int32_t z_tool_um[TOOL_COUNT][OFFSET_VARIANTS];
+    static int32_t c_tool_ticks[TOOL_COUNT][OFFSET_VARIANTS];
 
     // Display modes
     // X: diameter (default) or radius display

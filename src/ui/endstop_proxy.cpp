@@ -56,11 +56,13 @@ void EndstopProxy::setMinFromDisplayUm(int32_t display_um, int tool_index) {
     // Convert from user display coordinates back to machine coordinates
     int off = OffsetManager::getCurrentOffset();
     if (off < 0 || off >= OFFSET_COUNT) off = 0;
+    const int off_b = OffsetManager::isOffsetBActive(off) ? 1 : 0;
+    const int tool_b = ToolManager::isToolBActive(tool_index) ? 1 : 0;
 
     // First convert from user display units to machine direction
     int32_t machine_um = CoordinateSystem::zUserToMachineUm(display_um);
     // Then add back offsets to get raw machine position
-    min_z_um = machine_um + CoordinateSystem::z_global_um[off] + CoordinateSystem::z_tool_um[tool_index];
+    min_z_um = machine_um + CoordinateSystem::z_global_um[off][off_b] + CoordinateSystem::z_tool_um[tool_index][tool_b];
 
     // Ensure min <= max
     if (max_z_um != INT32_MAX && min_z_um > max_z_um) {
@@ -79,9 +81,11 @@ void EndstopProxy::setMaxFromDisplayUm(int32_t display_um, int tool_index) {
     // Convert from user display coordinates back to machine coordinates
     int off = OffsetManager::getCurrentOffset();
     if (off < 0 || off >= OFFSET_COUNT) off = 0;
+    const int off_b = OffsetManager::isOffsetBActive(off) ? 1 : 0;
+    const int tool_b = ToolManager::isToolBActive(tool_index) ? 1 : 0;
 
     int32_t machine_um = CoordinateSystem::zUserToMachineUm(display_um);
-    max_z_um = machine_um + CoordinateSystem::z_global_um[off] + CoordinateSystem::z_tool_um[tool_index];
+    max_z_um = machine_um + CoordinateSystem::z_global_um[off][off_b] + CoordinateSystem::z_tool_um[tool_index][tool_b];
 
     // Ensure min <= max
     if (min_z_um != INT32_MIN && min_z_um > max_z_um) {
@@ -99,16 +103,20 @@ void EndstopProxy::setMaxFromDisplayUm(int32_t display_um, int tool_index) {
 int32_t EndstopProxy::getMinDisplayUm(int tool_index) {
     int off = OffsetManager::getCurrentOffset();
     if (off < 0 || off >= OFFSET_COUNT) off = 0;
+    const int off_b = OffsetManager::isOffsetBActive(off) ? 1 : 0;
+    const int tool_b = ToolManager::isToolBActive(tool_index) ? 1 : 0;
 
-    int32_t machine_um = min_z_um - CoordinateSystem::z_global_um[off] - CoordinateSystem::z_tool_um[tool_index];
+    int32_t machine_um = min_z_um - CoordinateSystem::z_global_um[off][off_b] - CoordinateSystem::z_tool_um[tool_index][tool_b];
     return CoordinateSystem::zMachineToUserUm(machine_um);
 }
 
 int32_t EndstopProxy::getMaxDisplayUm(int tool_index) {
     int off = OffsetManager::getCurrentOffset();
     if (off < 0 || off >= OFFSET_COUNT) off = 0;
+    const int off_b = OffsetManager::isOffsetBActive(off) ? 1 : 0;
+    const int tool_b = ToolManager::isToolBActive(tool_index) ? 1 : 0;
 
-    int32_t machine_um = max_z_um - CoordinateSystem::z_global_um[off] - CoordinateSystem::z_tool_um[tool_index];
+    int32_t machine_um = max_z_um - CoordinateSystem::z_global_um[off][off_b] - CoordinateSystem::z_tool_um[tool_index][tool_b];
     return CoordinateSystem::zMachineToUserUm(machine_um);
 }
 
