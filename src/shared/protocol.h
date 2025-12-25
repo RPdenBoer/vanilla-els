@@ -11,7 +11,7 @@
 static constexpr size_t PROTOCOL_PACKET_SIZE = 32;
 
 // Protocol version for compatibility checking
-static constexpr uint8_t PROTOCOL_VERSION = 5;
+static constexpr uint8_t PROTOCOL_VERSION = 7;
 
 // ============================================================================
 // MPG Mode (Manual Pulse Generator routing)
@@ -62,7 +62,7 @@ struct MotionStatusFlags {
     uint8_t spindle_moving  : 1;  // Spindle is rotating (RPM > threshold)
     uint8_t comms_ok        : 1;  // Communication healthy
 	uint8_t mpg_mode : 2;		  // Current MPG mode (MpgModeProto)
-	uint8_t sync_waiting : 1;	  // ELS sync is waiting for spindle index
+	uint8_t sync_waiting : 1;	  // ELS sync is waiting for phase match
 };
 
 // ============================================================================
@@ -82,10 +82,12 @@ struct __attribute__((packed)) CommandPacket {
 	uint8_t endstop_max_enabled;  // Max endstop active      [1]
 	MpgModeProto mpg_mode;		  // MPG routing mode        [1]
 
-	int32_t sync_z_um;			  // Sync target Z (machine) [4]
-	uint16_t sync_c_ticks;		  // Sync target C ticks     [2]
+	int32_t sync_z_um;			  // Sync reference Z (machine, Z=0) [4]
+	uint16_t sync_c_ticks;		  // Sync reference C ticks (C=0)    [2]
 	uint8_t sync_enabled;		  // Sync enabled flag       [1]
-	uint8_t reserved[4];		  // Padding                 [4]
+	int8_t  jog_dir;			  // Jog direction (-1/0/+1) [1]
+	uint8_t jog_active;			  // Jog active flag         [1]
+	uint8_t reserved[2];		  // Padding                 [2]
 	uint8_t sequence;             // Packet sequence number  [1]
     uint8_t checksum;             // XOR checksum            [1]
 };                                // Total: 32 bytes

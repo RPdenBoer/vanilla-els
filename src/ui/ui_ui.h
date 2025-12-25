@@ -21,7 +21,9 @@ public:
     static void onEditSync(lv_event_t *e);
     static void onLongPressSync(lv_event_t *e);
     static void onToggleEls(lv_event_t *e);
-    static void onJog(lv_event_t *e);
+    static void onJogPress(lv_event_t *e);
+	static void onJogPressing(lv_event_t *e);
+	static void onJogRelease(lv_event_t *e);
     static void onEditEndstopMin(lv_event_t *e);
     static void onEditEndstopMax(lv_event_t *e);
     static void onLongPressEndstopMin(lv_event_t *e);
@@ -32,6 +34,8 @@ public:
 	static void updateSyncButtonStates();
     static void forceElsOff();
     static void setElsButtonActive(bool active);
+	static bool isJogActive();
+	static int8_t getJogDir();
 	static void initPhysicalButtons();
 	static void pollPhysicalButtons();
 	static void triggerElsLeft();
@@ -66,9 +70,18 @@ private:
     static uint32_t btn_right_down_ms;
 	static bool endstop_min_hit;
 	static bool endstop_max_hit;
+	static bool jog_touch_left;
+	static bool jog_touch_right;
+	static bool jog_phys_left;
+	static bool jog_phys_right;
+	static bool jog_touch_left_down;
+	static bool jog_touch_right_down;
+	static uint32_t jog_touch_left_down_ms;
+	static uint32_t jog_touch_right_down_ms;
 
 	static void createUI();
     static void updateJogAvailability();
+	static void toggleElsInternal(lv_obj_t *btn, int dir);
 	static lv_obj_t *makeAxisRow(lv_obj_t *parent, const char *name,
 								 lv_obj_t **out_value_label, lv_event_cb_t zero_cb,
 								 lv_obj_t **out_name_label);

@@ -50,6 +50,8 @@ static void sendCommandsToMotionBoard() {
     SpiMaster::setElsEnabled(LeadscrewProxy::isEnabled());
     SpiMaster::setPitchUm(LeadscrewProxy::getPitchUm());
     SpiMaster::setDirectionMul(LeadscrewProxy::getDirectionMul());
+	const int8_t jog_dir = UIManager::getJogDir();
+	SpiMaster::setJog(jog_dir != 0, jog_dir);
     SpiMaster::setEndstops(
         EndstopProxy::getMinMachineUm(),
         EndstopProxy::getMaxMachineUm(),

@@ -23,15 +23,16 @@
 // Spindle Encoder Mode Configuration (SPINDLE_MODE_ENCODER)
 // ============================================================================
 // Spindle encoder pins (quadrature, uses PCNT)
-static constexpr int C_PINA = 15;  // encoder A
-static constexpr int C_PINB = 16;  // encoder B
+// Avoid strap pins for encoder inputs.
+static constexpr int C_PINA = 16;  // encoder A
+static constexpr int C_PINB = 17;  // encoder B
 
 // ============================================================================
 // Spindle Stepper Mode Configuration (SPINDLE_MODE_STEPPER)
 // ============================================================================
 // Stepper output pins
-static constexpr int SPINDLE_STEP_PIN = 15; // Reuse encoder pins when not in encoder mode
-static constexpr int SPINDLE_DIR_PIN = 16;
+static constexpr int SPINDLE_STEP_PIN = 16; // Reuse encoder pins when not in encoder mode
+static constexpr int SPINDLE_DIR_PIN = 17;
 static constexpr int SPINDLE_EN_PIN = -1; // -1 = no enable pin / always enabled
 
 // Spindle stepper parameters
@@ -46,16 +47,17 @@ static constexpr uint32_t SPINDLE_MIN_STEP_PERIOD_US = 12;   // ~83k steps/s cap
 static constexpr uint32_t SPINDLE_MAX_STEP_PERIOD_US = 50000; // 20 Hz min
 
 // MPG (Manual Pulse Generator) encoder for speed control
-// Quadrature encoder replaces potentiometer for precise RPM adjustment
-static constexpr int MPG_PINA = 12;					  // 34;					  // MPG encoder A (input only pin)
-static constexpr int MPG_PINB = 13;					  // 39;					  // MPG encoder B (input only pin, VN)
+// Quadrature encoder replaces potentiometer for precise RPM adjustment.
+// GPIO34/35 are input-only and require external pullups.
+static constexpr int MPG_PINA = 34;					  // MPG encoder A (input only pin)
+static constexpr int MPG_PINB = 35;					  // MPG encoder B (input only pin, VN)
 static constexpr int32_t MPG_COUNTS_TO_MAX_RPM = 200 * 4 * 3; // 0-3000 RPM range (200 PPR * 4 quadrature)
 static constexpr bool MPG_INVERT_DIR = false;
 
-// Direction switch inputs (active LOW with internal pullups)
+// Direction switch inputs (active LOW, external pullups recommended)
 // Both off = stopped, FWD on = forward, REV on = reverse
-static constexpr int SPINDLE_FWD_PIN = 35; // Forward switch
-static constexpr int SPINDLE_REV_PIN = 36; // Reverse switch (VP)
+static constexpr int SPINDLE_FWD_PIN = 36; // Forward switch (input only pin)
+static constexpr int SPINDLE_REV_PIN = 39; // Reverse switch (input only pin, VN)
 
 // Acceleration limit (RPM per second) - prevents jerky speed changes
 static constexpr int32_t SPINDLE_ACCEL_RPM_PER_SEC = 500;
@@ -88,6 +90,8 @@ static constexpr bool ELS_INVERT_DIR = false;
 static constexpr int32_t ELS_PULSE_US = 2;
 // Cap steps per update cycle to avoid extreme bursts if we fall behind
 static constexpr int32_t ELS_MAX_STEPS_PER_CYCLE = 800;
+// Constant jog feed (Z axis), used for long-press jog buttons
+static constexpr int32_t ELS_JOG_MM_PER_MIN = 100;
 
 // Use ESP-IDF RMT for precise step pulse timing (recommended)
 static constexpr bool     ELS_USE_RMT = true;
@@ -99,7 +103,21 @@ static constexpr int16_t PCNT_H_LIM = 12000;
 static constexpr int16_t PCNT_L_LIM = -12000;
 
 // SPI Slave pins (directly connected to UI board)
+// Motion board pins can be reassigned; rewire to match UI signals.
 static constexpr int SPI_SLAVE_MOSI = 23;
 static constexpr int SPI_SLAVE_MISO = 19;
 static constexpr int SPI_SLAVE_CLK  = 18;
-static constexpr int SPI_SLAVE_CS   = 5;
+static constexpr int SPI_SLAVE_CS   = 13;
+
+// ============================================================================
+// Reserved pins (future X stepper axis)
+// ============================================================================
+// X step should use RMT-capable output for clean pulse timing.
+static constexpr int X_STEP_PIN = 21;
+static constexpr int X_DIR_PIN  = 22;
+static constexpr int X_EN_PIN   = -1; // set if enable line is needed
+
+// Reserved pins (future ELS physical buttons)
+// NOTE: GPIO1/3 are UART0. Using these will interfere with Serial logging/programming.
+static constexpr int ELS_BTN_LEFT_PIN  = 1;
+static constexpr int ELS_BTN_RIGHT_PIN = 3;

@@ -36,6 +36,7 @@ public:
     static void setSync(int32_t z_um, bool enabled, uint16_t c_ticks);
 	static void setMpgMode(MpgModeProto mode);
 	static MpgModeProto getMpgMode() { return mpg_mode; }
+	static void setJog(bool active, int8_t dir);
 
 private:
     static StatusPacket last_status;
@@ -55,4 +56,6 @@ private:
     static uint16_t sync_c_ticks;
     static bool sync_enabled;
 	static MpgModeProto mpg_mode;
+	static bool jog_active;
+	static int8_t jog_dir;
 };

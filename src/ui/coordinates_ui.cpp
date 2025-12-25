@@ -1,5 +1,6 @@
 #include "coordinates_ui.h"
 #include "offsets_ui.h"
+#include "tools_ui.h"
 
 #include <Arduino.h>
 #include <Preferences.h>
@@ -10,13 +11,13 @@ int32_t CoordinateSystem::x_raw_um = 0;
 int32_t CoordinateSystem::z_raw_um = 0;
 int32_t CoordinateSystem::c_raw_ticks = 0;
 
-int32_t CoordinateSystem::x_global_um[OFFSET_COUNT] = {0};
-int32_t CoordinateSystem::z_global_um[OFFSET_COUNT] = {0};
-int32_t CoordinateSystem::c_global_ticks[OFFSET_COUNT] = {0};
+int32_t CoordinateSystem::x_global_um[OFFSET_COUNT][CoordinateSystem::OFFSET_VARIANTS] = {0};
+int32_t CoordinateSystem::z_global_um[OFFSET_COUNT][CoordinateSystem::OFFSET_VARIANTS] = {0};
+int32_t CoordinateSystem::c_global_ticks[OFFSET_COUNT][CoordinateSystem::OFFSET_VARIANTS] = {0};
 
-int32_t CoordinateSystem::x_tool_um[TOOL_COUNT] = {0};
-int32_t CoordinateSystem::z_tool_um[TOOL_COUNT] = {0};
-int32_t CoordinateSystem::c_tool_ticks[TOOL_COUNT] = {0};
+int32_t CoordinateSystem::x_tool_um[TOOL_COUNT][CoordinateSystem::OFFSET_VARIANTS] = {0};
+int32_t CoordinateSystem::z_tool_um[TOOL_COUNT][CoordinateSystem::OFFSET_VARIANTS] = {0};
+int32_t CoordinateSystem::c_tool_ticks[TOOL_COUNT][CoordinateSystem::OFFSET_VARIANTS] = {0};
 
 bool CoordinateSystem::x_radius_mode = true;
 bool CoordinateSystem::z_inverted = false;
@@ -51,22 +52,28 @@ int32_t CoordinateSystem::zUserToMachineUm(int32_t user_um) {
 int32_t CoordinateSystem::getDisplayX(int tool_index) {
     int off = OffsetManager::getCurrentOffset();
     if (off < 0 || off >= OFFSET_COUNT) off = 0;
-    int32_t machine_um = x_raw_um - x_global_um[off] - x_tool_um[tool_index];
+    const int off_b = OffsetManager::isOffsetBActive(off) ? 1 : 0;
+    const int tool_b = ToolManager::isToolBActive(tool_index) ? 1 : 0;
+    int32_t machine_um = x_raw_um - x_global_um[off][off_b] - x_tool_um[tool_index][tool_b];
     return xMachineToUserUm(machine_um);
 }
 
 int32_t CoordinateSystem::getDisplayZ(int tool_index) {
     int off = OffsetManager::getCurrentOffset();
     if (off < 0 || off >= OFFSET_COUNT) off = 0;
-    int32_t machine_um = z_raw_um - z_global_um[off] - z_tool_um[tool_index];
+    const int off_b = OffsetManager::isOffsetBActive(off) ? 1 : 0;
+    const int tool_b = ToolManager::isToolBActive(tool_index) ? 1 : 0;
+    int32_t machine_um = z_raw_um - z_global_um[off][off_b] - z_tool_um[tool_index][tool_b];
     return zMachineToUserUm(machine_um);
 }
 
 int32_t CoordinateSystem::getDisplayC(int32_t c_ticks, int tool_index) {
     int off = OffsetManager::getCurrentOffset();
     if (off < 0 || off >= OFFSET_COUNT) off = 0;
+    const int off_b = OffsetManager::isOffsetBActive(off) ? 1 : 0;
+    const int tool_b = ToolManager::isToolBActive(tool_index) ? 1 : 0;
     int32_t raw = wrap01599(c_ticks);
-    return wrap01599(raw - c_global_ticks[off] - c_tool_ticks[tool_index]);
+    return wrap01599(raw - c_global_ticks[off][off_b] - c_tool_ticks[tool_index][tool_b]);
 }
 
 void CoordinateSystem::formatMm(char *out, size_t n, int32_t um) {
@@ -142,9 +149,9 @@ bool CoordinateSystem::parseLinearToUm(const char *s, int32_t *out_um) {
 
 struct ToolOffsetsBlob {
     uint32_t magic;
-    int32_t x[TOOL_COUNT];
-    int32_t z[TOOL_COUNT];
-    int32_t c[TOOL_COUNT];
+    int32_t x[TOOL_COUNT][CoordinateSystem::OFFSET_VARIANTS];
+    int32_t z[TOOL_COUNT][CoordinateSystem::OFFSET_VARIANTS];
+    int32_t c[TOOL_COUNT][CoordinateSystem::OFFSET_VARIANTS];
 };
 
 static constexpr uint32_t TOOL_OFFSETS_MAGIC = 0x544F4F4C; // "TOOL"
@@ -157,10 +164,34 @@ bool CoordinateSystem::loadToolOffsets() {
     ToolOffsetsBlob blob = {};
     size_t len = prefs.getBytes(TOOL_OFFSETS_KEY, &blob, sizeof(blob));
     prefs.end();
-    if (len != sizeof(blob) || blob.magic != TOOL_OFFSETS_MAGIC) return false;
-    memcpy(x_tool_um, blob.x, sizeof(blob.x));
-    memcpy(z_tool_um, blob.z, sizeof(blob.z));
-    memcpy(c_tool_ticks, blob.c, sizeof(blob.c));
+    if (len == sizeof(blob) && blob.magic == TOOL_OFFSETS_MAGIC) {
+        memcpy(x_tool_um, blob.x, sizeof(blob.x));
+        memcpy(z_tool_um, blob.z, sizeof(blob.z));
+        memcpy(c_tool_ticks, blob.c, sizeof(blob.c));
+        return true;
+    }
+
+    struct ToolOffsetsBlobV1 {
+        uint32_t magic;
+        int32_t x[TOOL_COUNT];
+        int32_t z[TOOL_COUNT];
+        int32_t c[TOOL_COUNT];
+    };
+
+    ToolOffsetsBlobV1 blob_v1 = {};
+    if (!prefs.begin(TOOL_OFFSETS_NS, true)) return false;
+    len = prefs.getBytes(TOOL_OFFSETS_KEY, &blob_v1, sizeof(blob_v1));
+    prefs.end();
+    if (len != sizeof(blob_v1) || blob_v1.magic != TOOL_OFFSETS_MAGIC) return false;
+
+    memset(x_tool_um, 0, sizeof(x_tool_um));
+    memset(z_tool_um, 0, sizeof(z_tool_um));
+    memset(c_tool_ticks, 0, sizeof(c_tool_ticks));
+    for (int i = 0; i < TOOL_COUNT; i++) {
+        x_tool_um[i][0] = blob_v1.x[i];
+        z_tool_um[i][0] = blob_v1.z[i];
+        c_tool_ticks[i][0] = blob_v1.c[i];
+    }
     return true;
 }
 

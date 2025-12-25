@@ -23,11 +23,15 @@ public:
     // Direction multiplier (+1 normal, -1 reversed for jog)
     static void setDirectionMul(int8_t mul);
 
-    // Sync helper (pause at target Z and wait for spindle index)
+    // Sync helper (phase-lock to spindle based on Z=0/C=0 reference)
     static void setSync(bool enabled, int32_t z_um, int32_t c_ticks);
     static bool isSyncWaiting() { return sync_waiting; }
     static bool isSyncEnabled() { return sync_enabled; }
     static bool isSyncIn() { return sync_in; }
+
+	// Jog control (constant feed, ignores spindle)
+	static void setJog(int8_t dir, bool active);
+	static bool isJogActive() { return jog_active; }
     
     // Software endstops (in raw Z encoder microns)
     static void setEndstops(int32_t min_um, int32_t max_um, bool min_en, bool max_en);
@@ -55,15 +59,18 @@ private:
 
     static bool sync_enabled;
     static bool sync_waiting;
-    static bool sync_armed;
     static bool sync_in;
-    static int32_t sync_z_um;
-    static int32_t sync_phase_ticks;
-    static int32_t sync_tolerance_um;
+    static int32_t sync_z_um;         // Reference Z0 (machine coordinates)
+    static int32_t sync_phase_ticks;  // Reference C0 (raw ticks)
     static int32_t sync_tolerance_out_um;
     static int32_t sync_ref_z_um;
     static int32_t sync_ref_spindle;
 	static int32_t last_z_um;
+	static volatile bool jog_active;
+	static volatile int8_t jog_dir;
+	static bool jog_prev_active;
+	static uint32_t jog_last_us;
+	static int64_t jog_step_accumulator;
 
     static bool checkEndstops(int32_t z_um);
 };
