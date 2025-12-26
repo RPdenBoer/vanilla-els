@@ -37,6 +37,8 @@ public:
 	static void setMpgMode(MpgModeProto mode);
 	static MpgModeProto getMpgMode() { return mpg_mode; }
 	static void setJog(bool active, int8_t dir);
+	static void setOtaRequest(bool active);
+	static void setRebootRequest(bool active);
 
 private:
     static StatusPacket last_status;
@@ -58,4 +60,6 @@ private:
 	static MpgModeProto mpg_mode;
 	static bool jog_active;
 	static int8_t jog_dir;
+	static bool ota_request;
+	static bool reboot_request;
 };

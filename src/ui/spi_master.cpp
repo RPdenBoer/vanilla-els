@@ -22,6 +22,8 @@ bool SpiMaster::sync_enabled = false;
 MpgModeProto SpiMaster::mpg_mode = MpgModeProto::RPM_CONTROL;
 bool SpiMaster::jog_active = false;
 int8_t SpiMaster::jog_dir = 0;
+bool SpiMaster::ota_request = false;
+bool SpiMaster::reboot_request = false;
 
 // Use HSPI for communication with motion board
 static SPIClass hspi(HSPI);
@@ -108,6 +110,8 @@ void SpiMaster::buildCommand(CommandPacket& cmd) {
 	cmd.sync_enabled = sync_enabled ? 1 : 0;
 	cmd.jog_dir = jog_active ? jog_dir : 0;
 	cmd.jog_active = jog_active ? 1 : 0;
+	cmd.ota_request = ota_request ? 1 : 0;
+	cmd.reboot_request = reboot_request ? 1 : 0;
 	cmd.sequence = sequence++;
 }
 
@@ -240,4 +244,26 @@ void SpiMaster::setJog(bool active, int8_t dir)
 #endif
 	jog_active = active && (new_dir != 0);
 	jog_dir = new_dir;
+}
+
+void SpiMaster::setOtaRequest(bool active)
+{
+#if DEBUG_SPI_LOGGING
+	if (active != ota_request)
+	{
+		Serial.printf("[UI->Motion] OTA request: %s\n", active ? "ON" : "OFF");
+	}
+#endif
+	ota_request = active;
+}
+
+void SpiMaster::setRebootRequest(bool active)
+{
+#if DEBUG_SPI_LOGGING
+	if (active != reboot_request)
+	{
+		Serial.printf("[UI->Motion] Reboot request: %s\n", active ? "ON" : "OFF");
+	}
+#endif
+	reboot_request = active;
 }

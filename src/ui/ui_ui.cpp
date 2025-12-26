@@ -8,6 +8,7 @@
 #include "leadscrew_proxy.h"
 #include "endstop_proxy.h"
 #include "sync_proxy.h"
+#include "ota_proxy.h"
 #include "spi_master.h"
 #include <Arduino.h>
 #include <cstring>
@@ -735,8 +736,8 @@ void UIManager::onTogglePitchMode(lv_event_t *e) {
 void UIManager::onLongPressSync(lv_event_t *e)
 {
 	(void)e;
-	SyncProxy::toggleEnabled();
-	updateSyncButtonStates();
+	OtaProxy::start();
+	forceElsOff();
 }
 
 void UIManager::toggleElsInternal(lv_obj_t *btn, int dir)

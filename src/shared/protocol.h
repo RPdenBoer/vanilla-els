@@ -11,7 +11,7 @@
 static constexpr size_t PROTOCOL_PACKET_SIZE = 32;
 
 // Protocol version for compatibility checking
-static constexpr uint8_t PROTOCOL_VERSION = 7;
+static constexpr uint8_t PROTOCOL_VERSION = 9;
 
 // ============================================================================
 // MPG Mode (Manual Pulse Generator routing)
@@ -87,7 +87,8 @@ struct __attribute__((packed)) CommandPacket {
 	uint8_t sync_enabled;		  // Sync enabled flag       [1]
 	int8_t  jog_dir;			  // Jog direction (-1/0/+1) [1]
 	uint8_t jog_active;			  // Jog active flag         [1]
-	uint8_t reserved[2];		  // Padding                 [2]
+	uint8_t ota_request;		  // Request OTA mode        [1]
+	uint8_t reboot_request;		  // Request reboot          [1]
 	uint8_t sequence;             // Packet sequence number  [1]
     uint8_t checksum;             // XOR checksum            [1]
 };                                // Total: 32 bytes
@@ -103,13 +104,15 @@ struct __attribute__((packed)) StatusPacket {
     SyncStateProto sync_state;    // Sync state              [1]
     
     int32_t x_count;              // X encoder raw count     [4]
-    int32_t z_count;              // Z encoder raw count     [4]
-    int32_t c_count;              // Spindle total count     [4]
-    int32_t z_steps;              // Stepper position        [4]
+	int32_t z_count;              // Z encoder raw count     [4]
+	int32_t c_count;              // Spindle total count     [4]
+	int32_t z_steps;              // Stepper position        [4]
     
     int16_t rpm_signed;           // Spindle RPM with sign   [2]
 	int16_t target_rpm;			  // Target RPM from MPG     [2]
-	uint8_t reserved2[6];		  // Padding                 [6]
+	uint8_t ota_active;			  // OTA mode active         [1]
+	uint8_t wifi_connected;		  // WiFi connected          [1]
+	uint8_t reserved2[4];		  // Padding                 [4]
 
 	uint8_t sequence;             // Echo of command seq     [1]
     uint8_t checksum;             // XOR checksum            [1]

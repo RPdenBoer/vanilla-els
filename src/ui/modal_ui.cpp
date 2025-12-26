@@ -375,11 +375,14 @@ void ModalManager::showOffsetModal(AxisSel axis) {
     lv_obj_t *btn_t = lv_btn_create(row);
     lv_obj_set_size(btn_t, main_g_btn_w, 44);
     lv_obj_add_event_cb(btn_t, onSetTool, LV_EVENT_CLICKED, nullptr);
-    lv_obj_set_style_bg_color(btn_t, lv_palette_darken(LV_PALETTE_ORANGE, 2), LV_PART_MAIN);
+    const bool tool_b_active = ToolManager::isToolBActive(ToolManager::getCurrentTool());
+    const lv_color_t tool_bg = lv_palette_darken(LV_PALETTE_ORANGE, tool_b_active ? 4 : 2);
+    lv_obj_set_style_bg_color(btn_t, tool_bg, LV_PART_MAIN);
+    lv_obj_set_style_border_color(btn_t, tool_bg, LV_PART_MAIN);
     lv_obj_set_style_text_color(btn_t, lv_color_white(), LV_PART_MAIN);
-    char ttxt[8];
-    if (ToolManager::isToolBActive(ToolManager::getCurrentTool()))
-        snprintf(ttxt, sizeof(ttxt), "T%dB", ToolManager::getCurrentTool() + 1);
+    char ttxt[12];
+    if (tool_b_active)
+        snprintf(ttxt, sizeof(ttxt), "T%d B", ToolManager::getCurrentTool() + 1);
     else
         snprintf(ttxt, sizeof(ttxt), "T%d", ToolManager::getCurrentTool() + 1);
     lv_obj_t *lblt = lv_label_create(btn_t);
@@ -391,11 +394,14 @@ void ModalManager::showOffsetModal(AxisSel axis) {
     lv_obj_t *btn_g = lv_btn_create(row);
     lv_obj_set_size(btn_g, main_g_btn_w, 44);
     lv_obj_add_event_cb(btn_g, onSetGlobal, LV_EVENT_CLICKED, nullptr);
-    lv_obj_set_style_bg_color(btn_g, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_MAIN);
+    const bool offset_b_active = OffsetManager::isOffsetBActive(OffsetManager::getCurrentOffset());
+    const lv_color_t offset_bg = lv_palette_darken(LV_PALETTE_BLUE, offset_b_active ? 4 : 2);
+    lv_obj_set_style_bg_color(btn_g, offset_bg, LV_PART_MAIN);
+    lv_obj_set_style_border_color(btn_g, offset_bg, LV_PART_MAIN);
     lv_obj_set_style_text_color(btn_g, lv_color_white(), LV_PART_MAIN);
-    char gtxt[8];
-    if (OffsetManager::isOffsetBActive(OffsetManager::getCurrentOffset()))
-        snprintf(gtxt, sizeof(gtxt), "G%dB", OffsetManager::getCurrentOffset() + 1);
+    char gtxt[12];
+    if (offset_b_active)
+        snprintf(gtxt, sizeof(gtxt), "G%d B", OffsetManager::getCurrentOffset() + 1);
     else
         snprintf(gtxt, sizeof(gtxt), "G%d", OffsetManager::getCurrentOffset() + 1);
     lv_obj_t *lblg = lv_label_create(btn_g);

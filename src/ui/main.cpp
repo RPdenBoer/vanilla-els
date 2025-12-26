@@ -18,6 +18,7 @@
 #include "leadscrew_proxy.h"
 #include "endstop_proxy.h"
 #include "sync_proxy.h"
+#include "ota_proxy.h"
 #include "ui_ui.h"
 
 // ============================================================================
@@ -38,6 +39,8 @@ static void updateFromMotionBoard() {
 	const SyncStateProto sync_state = status.sync_state;
 	SyncProxy::setWaiting(sync_state == SyncStateProto::SYNC_WAITING);
 	SyncProxy::setInSync(sync_state == SyncStateProto::SYNC_IN_SYNC);
+	OtaProxy::setMotionWifi(status.wifi_connected != 0);
+	OtaProxy::setMotionOtaActive(status.ota_active != 0);
 
 	// Check for endstop hit flag from motion board
     if (status.flags.endstop_hit) {
@@ -52,6 +55,8 @@ static void sendCommandsToMotionBoard() {
     SpiMaster::setDirectionMul(LeadscrewProxy::getDirectionMul());
 	const int8_t jog_dir = UIManager::getJogDir();
 	SpiMaster::setJog(jog_dir != 0, jog_dir);
+	SpiMaster::setOtaRequest(OtaProxy::isActive());
+	SpiMaster::setRebootRequest(OtaProxy::shouldRequestReboot());
     SpiMaster::setEndstops(
         EndstopProxy::getMinMachineUm(),
         EndstopProxy::getMaxMachineUm(),
@@ -160,6 +165,8 @@ void loop() {
     uint32_t now = millis();
     uint32_t diff = now - last_lv_ms;
     last_lv_ms = now;
+
+	OtaProxy::handle();
 
     lv_tick_inc(diff);
     lv_timer_handler();

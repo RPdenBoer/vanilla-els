@@ -84,10 +84,16 @@ bool ToolManager::isToolBActive(int index) {
 void ToolManager::updateLabel(int index) {
     if (index < 0 || index >= TOOL_COUNT) return;
     if (!tool_labels[index]) return;
-    char txt[8];
-    if (tool_b[index]) snprintf(txt, sizeof(txt), "T%dB", index + 1);
+    char txt[12];
+    if (tool_b[index]) snprintf(txt, sizeof(txt), "T%d B", index + 1);
     else snprintf(txt, sizeof(txt), "T%d", index + 1);
     lv_label_set_text(tool_labels[index], txt);
+
+    if (tool_btns[index]) {
+        const lv_color_t bg = lv_palette_darken(LV_PALETTE_ORANGE, tool_b[index] ? 4 : 2);
+        lv_obj_set_style_bg_color(tool_btns[index], bg, LV_PART_MAIN | LV_STATE_CHECKED);
+        lv_obj_set_style_border_color(tool_btns[index], bg, LV_PART_MAIN | LV_STATE_CHECKED);
+    }
 }
 
 void ToolManager::loadState() {
