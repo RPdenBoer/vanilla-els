@@ -62,10 +62,16 @@ bool OffsetManager::isOffsetBActive(int index) {
 void OffsetManager::updateLabel(int index) {
     if (index < 0 || index >= OFFSET_COUNT) return;
     if (!offset_labels[index]) return;
-    char txt[8];
-    if (offset_b[index]) snprintf(txt, sizeof(txt), "G%dB", index + 1);
+    char txt[12];
+    if (offset_b[index]) snprintf(txt, sizeof(txt), "G%d B", index + 1);
     else snprintf(txt, sizeof(txt), "G%d", index + 1);
     lv_label_set_text(offset_labels[index], txt);
+
+    if (offset_btns[index]) {
+        const lv_color_t bg = lv_palette_darken(LV_PALETTE_BLUE, offset_b[index] ? 4 : 2);
+        lv_obj_set_style_bg_color(offset_btns[index], bg, LV_PART_MAIN | LV_STATE_CHECKED);
+        lv_obj_set_style_border_color(offset_btns[index], bg, LV_PART_MAIN | LV_STATE_CHECKED);
+    }
 }
 
 int OffsetManager::getMainOffsetButtonWidth() {

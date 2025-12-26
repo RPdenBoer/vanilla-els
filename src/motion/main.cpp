@@ -10,6 +10,7 @@
 #include "encoder_motion.h"
 #include "stepper.h"
 #include "els_core.h"
+#include "ota_motion.h"
 
 #if SPINDLE_MODE == SPINDLE_MODE_STEPPER
 #include "spindle_stepper.h"
@@ -160,6 +161,8 @@ static bool prev_sync_enabled = false;
 static int32_t prev_sync_z = 0;
 
 void loop() {
+	OtaMotion::handle();
+
     // Build status packet FIRST (before processing SPI)
     // This ensures TX buffer has fresh data when master initiates transaction
     StatusPacket status = {};
@@ -184,10 +187,12 @@ void loop() {
 	// Status flags
     status.flags.els_enabled = ElsCore::isEnabled();
     status.flags.els_fault = ElsCore::hasFault();
-	status.flags.endstop_hit = ElsCore::endstopTriggered();
+    status.flags.endstop_hit = ElsCore::endstopTriggered();
     status.flags.spindle_moving = (abs(status.rpm_signed) > 10);
     status.flags.comms_ok = SpiSlave::isConnected();
 	status.flags.sync_waiting = ElsCore::isSyncWaiting();
+	status.ota_active = OtaMotion::isActive() ? 1 : 0;
+	status.wifi_connected = OtaMotion::isWifiConnected() ? 1 : 0;
 	status.sync_state = SyncStateProto::SYNC_DISABLED;
 	if (ElsCore::isSyncEnabled()) {
 		if (!ElsCore::isEnabled()) status.sync_state = SyncStateProto::SYNC_OUT_OF_SYNC;
@@ -205,6 +210,14 @@ void loop() {
     // If we have a valid command from UI, update ELS settings
     if (SpiSlave::isConnected()) {
         const CommandPacket& cmd = SpiSlave::getCommand();
+		if (cmd.ota_request != 0)
+		{
+			OtaMotion::start();
+		}
+		if (cmd.reboot_request != 0)
+		{
+			ESP.restart();
+		}
         
         bool els_en = (cmd.flags & 0x01);
         bool endstop_min_en = (cmd.endstop_min_enabled != 0);
@@ -247,10 +260,18 @@ void loop() {
 #endif
         
         // Update ELS state from command
-        ElsCore::setEnabled(els_en);
-        ElsCore::setPitchUm(cmd.pitch_um);
-        ElsCore::setDirectionMul(cmd.direction_mul);
-		ElsCore::setJog(cmd.jog_dir, cmd.jog_active != 0);
+		if (OtaMotion::isActive())
+		{
+			ElsCore::setEnabled(false);
+			ElsCore::setJog(0, false);
+		}
+		else
+		{
+			ElsCore::setEnabled(els_en);
+			ElsCore::setPitchUm(cmd.pitch_um);
+			ElsCore::setDirectionMul(cmd.direction_mul);
+			ElsCore::setJog(cmd.jog_dir, cmd.jog_active != 0);
+		}
 		ElsCore::setSync(cmd.sync_enabled != 0, cmd.sync_z_um, cmd.sync_c_ticks);
         ElsCore::setEndstops(
             cmd.endstop_min_um, 
@@ -261,8 +282,11 @@ void loop() {
 
 		// Handle MPG mode changes from UI (stepper mode only)
 #if SPINDLE_MODE == SPINDLE_MODE_STEPPER
-		MpgModeProto requestedMode = static_cast<MpgModeProto>(cmd.mpg_mode);
-		MpgEncoder::setMode(static_cast<MpgMode>(requestedMode));
+		if (!OtaMotion::isActive())
+		{
+			MpgModeProto requestedMode = static_cast<MpgModeProto>(cmd.mpg_mode);
+			MpgEncoder::setMode(static_cast<MpgMode>(requestedMode));
+		}
 #endif
 	} else {
         // No communication - disable ELS for safety
