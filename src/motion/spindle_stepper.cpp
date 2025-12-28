@@ -14,6 +14,9 @@ int16_t SpindleStepper::target_rpm = 0;
 int16_t SpindleStepper::current_rpm = 0;
 int8_t SpindleStepper::direction = 0;
 bool SpindleStepper::running = false;
+bool SpindleStepper::prev_fwd_pressed = false;
+bool SpindleStepper::prev_rev_pressed = false;
+uint32_t SpindleStepper::last_toggle_ms = 0;
 
 uint32_t SpindleStepper::last_update_us = 0;
 uint32_t SpindleStepper::last_dt_us = 0;
@@ -66,17 +69,28 @@ bool SpindleStepper::init() {
 // Read control inputs (MPG encoder and direction switch)
 // ============================================================================
 void SpindleStepper::readControls() {
-    // Read direction switch (active LOW)
-    bool fwd = (digitalRead(SPINDLE_FWD_PIN) == LOW);
-    bool rev = (digitalRead(SPINDLE_REV_PIN) == LOW);
-    
-    // Determine direction (both on = invalid, treat as stop)
-    if (fwd && !rev) {
-        direction = 1;
-    } else if (rev && !fwd) {
-        direction = -1;
-    } else {
-        direction = 0;
+    // Read momentary direction buttons (active LOW)
+    const bool fwd_pressed = (digitalRead(SPINDLE_FWD_PIN) == LOW);
+    const bool rev_pressed = (digitalRead(SPINDLE_REV_PIN) == LOW);
+
+    const bool fwd_edge = fwd_pressed && !prev_fwd_pressed;
+    const bool rev_edge = rev_pressed && !prev_rev_pressed;
+
+    prev_fwd_pressed = fwd_pressed;
+    prev_rev_pressed = rev_pressed;
+
+    if (fwd_edge || rev_edge) {
+        const uint32_t now_ms = millis();
+        if ((now_ms - last_toggle_ms) >= 50) {
+            last_toggle_ms = now_ms;
+            if (direction != 0) {
+                direction = 0;
+            } else if (fwd_edge && !rev_edge) {
+                direction = 1;
+            } else if (rev_edge && !fwd_edge) {
+                direction = -1;
+            }
+        }
     }
     
     // Get RPM from MPG encoder (only when in RPM control mode)

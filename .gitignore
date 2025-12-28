@@ -40,3 +40,4 @@ __pycache__/
 .env.*
 secrets*
 *secret*
+src/shared/wifi_config.h

@@ -56,6 +56,9 @@ private:
     static int32_t steps_per_sec;
     static int64_t step_accumulator_fp;
     static bool rmt_ready;
+    static bool prev_fwd_pressed;
+    static bool prev_rev_pressed;
+    static uint32_t last_toggle_ms;
     
     // Read analog potentiometer and direction switch
     static void readControls();
