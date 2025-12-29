@@ -24,6 +24,7 @@ bool SpiMaster::jog_active = false;
 int8_t SpiMaster::jog_dir = 0;
 bool SpiMaster::ota_request = false;
 bool SpiMaster::reboot_request = false;
+MotionCommand SpiMaster::pending_cmd = MotionCommand::NOP;
 
 // Use HSPI for communication with motion board
 static SPIClass hspi(HSPI);
@@ -96,7 +97,8 @@ bool SpiMaster::transact(const CommandPacket& cmd, StatusPacket& status) {
 void SpiMaster::buildCommand(CommandPacket& cmd) {
     memset(&cmd, 0, sizeof(cmd));
     cmd.version = PROTOCOL_VERSION;
-    cmd.cmd = MotionCommand::NOP;
+    cmd.cmd = pending_cmd;
+    pending_cmd = MotionCommand::NOP;
     cmd.flags = els_enabled ? 1 : 0;
     cmd.direction_mul = direction_mul;
     cmd.pitch_um = pitch_um;
@@ -266,4 +268,9 @@ void SpiMaster::setRebootRequest(bool active)
 	}
 #endif
 	reboot_request = active;
+}
+
+void SpiMaster::requestSpindleToggleFwd()
+{
+	pending_cmd = MotionCommand::SPINDLE_TOGGLE_FWD;
 }

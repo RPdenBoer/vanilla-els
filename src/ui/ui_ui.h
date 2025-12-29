@@ -26,10 +26,11 @@ public:
 	static void onJogRelease(lv_event_t *e);
     static void onEditEndstopMin(lv_event_t *e);
     static void onEditEndstopMax(lv_event_t *e);
-    static void onLongPressEndstopMin(lv_event_t *e);
+	static void onLongPressEndstopMin(lv_event_t *e);
     static void onLongPressEndstopMax(lv_event_t *e);
 	static void onLongPressZ(lv_event_t *e);
 	static void onLongPressC(lv_event_t *e);
+	static void onLongPressCHeading(lv_event_t *e);
 	static void updateEndstopButtonStates();
 	static void updateSyncButtonStates();
     static void forceElsOff();

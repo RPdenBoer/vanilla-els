@@ -38,6 +38,7 @@ enum class MotionCommand : uint8_t
 	CLEAR_ENDSTOPS,	 // Clear endstop limits
 	SYNC_REQUEST,	 // Request full state sync
 	SET_MPG_MODE,	 // Set MPG routing mode (RPM/Z jog/C jog)
+	SPINDLE_TOGGLE_FWD, // Toggle spindle forward (momentary command)
 };
 
 // ============================================================================

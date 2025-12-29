@@ -40,6 +40,8 @@ static constexpr int SPINDLE_EN_PIN = -1; // -1 = no enable pin / always enabled
 static constexpr int32_t SPINDLE_STEPS_PER_REV = 1600;
 static constexpr int32_t SPINDLE_MAX_RPM = 3000;
 static constexpr int32_t SPINDLE_MIN_RPM = 1; // Minimum commanded RPM
+static constexpr int32_t SPINDLE_JOG_RPM = 200; // Constant RPM for long-press jog
+static constexpr uint32_t SPINDLE_JOG_PRESS_MS = 350; // Long-press threshold for jog
 static constexpr bool SPINDLE_INVERT_DIR = false;
 static constexpr uint32_t SPINDLE_PULSE_US = 2;          // Step pulse width
 static constexpr uint32_t SPINDLE_RMT_RES_HZ = 500000;   // 2us tick to allow long low times

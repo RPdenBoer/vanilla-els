@@ -541,7 +541,7 @@ lv_obj_t *UIManager::makeAxisRow(lv_obj_t *parent, const char *name,
 	{
 		// Use SHORT_CLICKED so long press doesn't also trigger the toggle
 		lv_obj_add_event_cb(hitbox, onToggleCMode, LV_EVENT_SHORT_CLICKED, nullptr);
-		lv_obj_add_event_cb(hitbox, onLongPressC, LV_EVENT_LONG_PRESSED, nullptr);
+		lv_obj_add_event_cb(hitbox, onLongPressCHeading, LV_EVENT_LONG_PRESSED, nullptr);
 	}
 
 	lv_obj_t *lbl_name = lv_label_create(row);
@@ -936,6 +936,13 @@ void UIManager::onLongPressC(lv_event_t *e)
 	}
 
 	Serial.printf("[UI] MPG mode -> %s\n", newMode == MpgModeProto::JOG_C ? "JOG_C" : "RPM");
+}
+
+void UIManager::onLongPressCHeading(lv_event_t *e)
+{
+	(void)e;
+	SpiMaster::requestSpindleToggleFwd();
+	Serial.println("[UI] Spindle toggle (FWD)");
 }
 
 void UIManager::updateEndstopButtonStates() {

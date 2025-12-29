@@ -159,6 +159,7 @@ static int32_t prev_endstop_min = 0;
 static int32_t prev_endstop_max = 0;
 static bool prev_sync_enabled = false;
 static int32_t prev_sync_z = 0;
+static uint8_t prev_cmd_sequence = 0xFF;
 
 void loop() {
 	OtaMotion::handle();
@@ -218,6 +219,15 @@ void loop() {
 		{
 			ESP.restart();
 		}
+
+#if SPINDLE_MODE == SPINDLE_MODE_STEPPER
+		if (cmd.sequence != prev_cmd_sequence) {
+			prev_cmd_sequence = cmd.sequence;
+			if (cmd.cmd == MotionCommand::SPINDLE_TOGGLE_FWD) {
+				SpindleStepper::queueSoftToggle(1);
+			}
+		}
+#endif
         
         bool els_en = (cmd.flags & 0x01);
         bool endstop_min_en = (cmd.endstop_min_enabled != 0);
@@ -292,6 +302,7 @@ void loop() {
         // No communication - disable ELS for safety
         ElsCore::setEnabled(false);
 		ElsCore::setJog(0, false);
+		prev_cmd_sequence = 0xFF;
     }
     
     // Small delay - SPI handling doesn't need to be super fast

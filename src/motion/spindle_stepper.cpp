@@ -14,9 +14,16 @@ int16_t SpindleStepper::target_rpm = 0;
 int16_t SpindleStepper::current_rpm = 0;
 int8_t SpindleStepper::direction = 0;
 bool SpindleStepper::running = false;
+volatile int8_t SpindleStepper::pending_soft_toggle_dir = 0;
 bool SpindleStepper::prev_fwd_pressed = false;
 bool SpindleStepper::prev_rev_pressed = false;
+bool SpindleStepper::fwd_long_handled = false;
+bool SpindleStepper::rev_long_handled = false;
+uint32_t SpindleStepper::fwd_down_ms = 0;
+uint32_t SpindleStepper::rev_down_ms = 0;
 uint32_t SpindleStepper::last_toggle_ms = 0;
+bool SpindleStepper::jog_active = false;
+int8_t SpindleStepper::jog_dir = 0;
 
 uint32_t SpindleStepper::last_update_us = 0;
 uint32_t SpindleStepper::last_dt_us = 0;
@@ -65,33 +72,101 @@ bool SpindleStepper::init() {
     return true;
 }
 
+void SpindleStepper::queueSoftToggle(int8_t dir) {
+    if (dir > 0) {
+        pending_soft_toggle_dir = 1;
+    } else if (dir < 0) {
+        pending_soft_toggle_dir = -1;
+    }
+}
+
 // ============================================================================
 // Read control inputs (MPG encoder and direction switch)
 // ============================================================================
 void SpindleStepper::readControls() {
+    const uint32_t now_ms = millis();
+
     // Read momentary direction buttons (active LOW)
     const bool fwd_pressed = (digitalRead(SPINDLE_FWD_PIN) == LOW);
     const bool rev_pressed = (digitalRead(SPINDLE_REV_PIN) == LOW);
 
     const bool fwd_edge = fwd_pressed && !prev_fwd_pressed;
     const bool rev_edge = rev_pressed && !prev_rev_pressed;
+    const bool fwd_released = !fwd_pressed && prev_fwd_pressed;
+    const bool rev_released = !rev_pressed && prev_rev_pressed;
+
+    auto handle_short_press = [&](int8_t dir) {
+        if (jog_active)
+            return;
+        if ((now_ms - last_toggle_ms) < 50)
+            return;
+        last_toggle_ms = now_ms;
+        if (direction != 0) {
+            direction = 0;
+        } else {
+            direction = (dir > 0) ? 1 : -1;
+        }
+    };
+
+    auto start_jog = [&](int8_t dir) {
+        jog_active = true;
+        jog_dir = (dir > 0) ? 1 : -1;
+        direction = jog_dir;
+        current_rpm = (SPINDLE_JOG_RPM > SPINDLE_MAX_RPM) ? SPINDLE_MAX_RPM : (int16_t)SPINDLE_JOG_RPM;
+    };
+
+    auto stop_jog = [&](int8_t dir) {
+        if (!jog_active || jog_dir != dir)
+            return;
+        jog_active = false;
+        jog_dir = 0;
+        direction = 0;
+        current_rpm = 0;
+    };
+
+    int8_t soft_dir = pending_soft_toggle_dir;
+    if (soft_dir != 0) {
+        pending_soft_toggle_dir = 0;
+        handle_short_press(soft_dir);
+    }
+
+    if (fwd_edge) {
+        fwd_down_ms = now_ms;
+        fwd_long_handled = false;
+    }
+    if (rev_edge) {
+        rev_down_ms = now_ms;
+        rev_long_handled = false;
+    }
+
+    if (!jog_active && fwd_pressed && !rev_pressed && !fwd_long_handled &&
+        (now_ms - fwd_down_ms >= SPINDLE_JOG_PRESS_MS)) {
+        start_jog(1);
+        fwd_long_handled = true;
+    }
+    if (!jog_active && rev_pressed && !fwd_pressed && !rev_long_handled &&
+        (now_ms - rev_down_ms >= SPINDLE_JOG_PRESS_MS)) {
+        start_jog(-1);
+        rev_long_handled = true;
+    }
+
+    if (fwd_released) {
+        if (fwd_long_handled) {
+            stop_jog(1);
+        } else {
+            handle_short_press(1);
+        }
+    }
+    if (rev_released) {
+        if (rev_long_handled) {
+            stop_jog(-1);
+        } else {
+            handle_short_press(-1);
+        }
+    }
 
     prev_fwd_pressed = fwd_pressed;
     prev_rev_pressed = rev_pressed;
-
-    if (fwd_edge || rev_edge) {
-        const uint32_t now_ms = millis();
-        if ((now_ms - last_toggle_ms) >= 50) {
-            last_toggle_ms = now_ms;
-            if (direction != 0) {
-                direction = 0;
-            } else if (fwd_edge && !rev_edge) {
-                direction = 1;
-            } else if (rev_edge && !fwd_edge) {
-                direction = -1;
-            }
-        }
-    }
     
     // Get RPM from MPG encoder (only when in RPM control mode)
     if (MpgEncoder::getMode() == MpgMode::RPM_CONTROL) {
@@ -120,14 +195,20 @@ void SpindleStepper::updateSpeed() {
     if (max_delta < 1) max_delta = 1;
     
     // Apply acceleration limiting
-    int16_t rpm_target = (direction == 0) ? 0 : target_rpm;
-    
-    if (current_rpm < rpm_target) {
-        current_rpm += max_delta;
-        if (current_rpm > rpm_target) current_rpm = rpm_target;
-    } else if (current_rpm > rpm_target) {
-        current_rpm -= max_delta;
-        if (current_rpm < rpm_target) current_rpm = rpm_target;
+    int16_t rpm_target = 0;
+    if (jog_active) {
+        rpm_target = (SPINDLE_JOG_RPM > SPINDLE_MAX_RPM) ? SPINDLE_MAX_RPM : (int16_t)SPINDLE_JOG_RPM;
+        if (rpm_target < 0) rpm_target = 0;
+        current_rpm = rpm_target;
+    } else {
+        rpm_target = (direction == 0) ? 0 : target_rpm;
+        if (current_rpm < rpm_target) {
+            current_rpm += max_delta;
+            if (current_rpm > rpm_target) current_rpm = rpm_target;
+        } else if (current_rpm > rpm_target) {
+            current_rpm -= max_delta;
+            if (current_rpm < rpm_target) current_rpm = rpm_target;
+        }
     }
     
     // Calculate step period from RPM
@@ -263,6 +344,9 @@ void SpindleStepper::stop() {
     rpm_abs = 0;
     target_rpm = 0;
     direction = 0;
+	jog_active = false;
+	jog_dir = 0;
+	pending_soft_toggle_dir = 0;
 	step_period_us = 0;
 	steps_per_sec = 0;
 	step_accumulator_fp = 0;

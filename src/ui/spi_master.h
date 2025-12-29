@@ -39,6 +39,7 @@ public:
 	static void setJog(bool active, int8_t dir);
 	static void setOtaRequest(bool active);
 	static void setRebootRequest(bool active);
+	static void requestSpindleToggleFwd();
 
 private:
     static StatusPacket last_status;
@@ -62,4 +63,5 @@ private:
 	static int8_t jog_dir;
 	static bool ota_request;
 	static bool reboot_request;
+	static MotionCommand pending_cmd;
 };
