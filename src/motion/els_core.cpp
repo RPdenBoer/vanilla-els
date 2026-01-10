@@ -27,6 +27,7 @@ bool ElsCore::sync_in = false;
 int32_t ElsCore::sync_z_um = 0;
 int32_t ElsCore::sync_phase_ticks = 0;
 int32_t ElsCore::sync_tolerance_out_um = 25;
+int32_t ElsCore::sync_tolerance_in_ticks = 8;  // ~1.8 degrees tolerance for sync acquisition
 int32_t ElsCore::sync_ref_z_um = 0;
 int32_t ElsCore::sync_ref_spindle = 0;
 int32_t ElsCore::last_z_um = 0;
@@ -54,6 +55,15 @@ static inline int32_t wrap_phase(int32_t count) {
 	int32_t r = count % C_COUNTS_PER_REV;
 	if (r < 0) r += C_COUNTS_PER_REV;
 	return r;
+}
+
+// Check if two phases are within tolerance (handles wrap-around)
+static inline bool phase_within_tolerance(int32_t phase_a, int32_t phase_b, int32_t tolerance) {
+	int32_t diff = phase_a - phase_b;
+	if (diff < 0) diff = -diff;
+	// Handle wrap-around: if diff > half revolution, measure the other way
+	if (diff > C_COUNTS_PER_REV / 2) diff = C_COUNTS_PER_REV - diff;
+	return diff <= tolerance;
 }
 
 static inline bool crossed_phase(int32_t prev, int32_t curr, int32_t target_phase) {
@@ -96,6 +106,7 @@ void ElsCore::init() {
 }
 
 void ElsCore::setEnabled(bool on) {
+    const bool was_enabled = enabled;
     if (on && !enabled) {
         // Enabling: sync to current spindle position
 		last_spindle_count = getSpindlePosition();
@@ -108,7 +119,8 @@ void ElsCore::setEnabled(bool on) {
 	if (!enabled) {
 		sync_waiting = false;
 		sync_in = false;
-	} else if (sync_enabled) {
+	} else if (sync_enabled && !was_enabled) {
+		// Only reset sync when transitioning from disabled to enabled
 		sync_waiting = true;
 		sync_in = false;
 	}
@@ -117,6 +129,7 @@ void ElsCore::setEnabled(bool on) {
 void ElsCore::setPitchUm(int32_t pitch) {
     if (pitch == pitch_um) return;
     pitch_um = pitch;
+    // Pitch changed - need to re-sync
 	if (sync_enabled && enabled) {
 		sync_waiting = true;
 		sync_in = false;
@@ -147,20 +160,37 @@ void ElsCore::setJog(int8_t dir, bool active)
 
 void ElsCore::setSync(bool enabled, int32_t z_um, int32_t c_ticks) {
 	const bool was_enabled = sync_enabled;
-	const int32_t prev_z = sync_z_um;
-	const int32_t prev_phase = sync_phase_ticks;
 	sync_enabled = enabled;
-	sync_z_um = z_um;
-	sync_phase_ticks = c_ticks;
+	
 	if (!sync_enabled) {
 		sync_waiting = false;
 		sync_in = false;
+		sync_z_um = z_um;
+		sync_phase_ticks = c_ticks;
 		return;
 	}
-	if (!was_enabled || prev_z != z_um || prev_phase != c_ticks) {
+	
+	// Only reset sync if parameters changed significantly or sync was just enabled
+	// Small variations in parameters (due to rounding etc) shouldn't reset sync
+	const int32_t z_diff = (z_um > sync_z_um) ? (z_um - sync_z_um) : (sync_z_um - z_um);
+	int32_t phase_diff = (c_ticks > sync_phase_ticks) ? (c_ticks - sync_phase_ticks) : (sync_phase_ticks - c_ticks);
+	if (phase_diff > C_COUNTS_PER_REV / 2) phase_diff = C_COUNTS_PER_REV - phase_diff;
+	
+	const bool params_changed = (z_diff > 100) || (phase_diff > 8);  // 100um or ~2 degrees
+	
+	if (!was_enabled || params_changed) {
+#if DEBUG_SPI_LOGGING
+		if (sync_in) {
+			Serial.printf("[SYNC] Reset! was_en=%d, z_diff=%ld, phase_diff=%ld\n",
+				was_enabled, z_diff, phase_diff);
+		}
+#endif
 		sync_in = false;
 		sync_waiting = ElsCore::enabled;
 	}
+	
+	sync_z_um = z_um;
+	sync_phase_ticks = c_ticks;
 }
 
 void ElsCore::setEndstops(int32_t min_um, int32_t max_um, bool min_en, bool max_en) {
@@ -253,18 +283,29 @@ void ElsCore::update() {
 				const int32_t phase_delta = (int32_t)(phase_num / (int64_t)pitch_um);
 				const int32_t target_phase = wrap_phase(sync_phase_ticks + phase_delta);
 				const int32_t current_phase = wrap_phase(spindle_count);
-				if (current_phase != target_phase &&
-					!crossed_phase(last_spindle_count, spindle_count, target_phase)) {
+				
+				// Check if we're within tolerance OR crossed through the target
+				const bool at_target = phase_within_tolerance(current_phase, target_phase, sync_tolerance_in_ticks);
+				const bool crossed_target = crossed_phase(last_spindle_count, spindle_count, target_phase);
+				
+				if (!at_target && !crossed_target) {
 					last_spindle_count = spindle_count;
 					last_z_um = z_um;
 					return;
 				}
+				
+				// Sync acquired! Adjust ref to align perfectly with target phase
 				sync_waiting = false;
 				sync_in = true;
 				sync_ref_z_um = z_um;
-				sync_ref_spindle = spindle_count;
+				// Snap to exact target phase to avoid accumulated error
+				sync_ref_spindle = spindle_count - (current_phase - target_phase);
 				last_spindle_count = spindle_count;
 				step_accumulator = 0;
+#if DEBUG_SPI_LOGGING
+				Serial.printf("[SYNC] Acquired! z=%ld, ref_spindle=%ld\n",
+					z_um, sync_ref_spindle);
+#endif
 			}
 		} else if (!sync_in) {
 			sync_waiting = true;
@@ -274,44 +315,18 @@ void ElsCore::update() {
 			return;
 		}
 
-		if (sync_in) {
-			const int32_t spindle_delta = spindle_count - sync_ref_spindle;
-			const int64_t numerator = (int64_t)spindle_delta * (int64_t)pitch_um * (int64_t)direction_mul;
-			const int32_t expected_z = sync_ref_z_um + (int32_t)(numerator / (int64_t)C_COUNTS_PER_REV);
-			const int32_t err = z_um - expected_z;
-			const int32_t abs_err = (err < 0) ? -err : err;
-			if (abs_err > sync_tolerance_out_um) {
-				sync_in = false;
-				sync_waiting = true;
-				last_spindle_count = spindle_count;
-				last_z_um = z_um;
-				step_accumulator = 0;
-				return;
-			}
-		}
+		// If sync_in, continue to step output below
 	}
 
+	// ========================================================================
+	// STEP OUTPUT - with sync correction if enabled
+	// ========================================================================
+	
 	int32_t spindle_delta = spindle_count - last_spindle_count;
     last_spindle_count = spindle_count;
 	last_z_um = z_um;
     
     if (spindle_delta == 0) return;
-    
-#if DEBUG_SPI_LOGGING
-    // Debug: log spindle movement
-    static uint32_t last_debug_ms = 0;
-    static int32_t total_spindle_delta = 0;
-    static int32_t total_steps_output = 0;
-    total_spindle_delta += spindle_delta;
-    
-    if (millis() - last_debug_ms > 1000) {
-        Serial.printf("[ELS] pitch=%ld um, spindle_delta=%ld, steps_out=%ld\n",
-            pitch_um, total_spindle_delta, total_steps_output);
-        total_spindle_delta = 0;
-        total_steps_output = 0;
-        last_debug_ms = millis();
-    }
-#endif
     
     // Check endstops before moving
     if (!checkEndstops(z_um)) {
@@ -321,20 +336,49 @@ void ElsCore::update() {
         return;
     }
     
-    // Calculate required Z movement in microns
-    // spindle_delta counts / C_COUNTS_PER_REV = revolutions
-    // revolutions * pitch_um = microns to travel
-    // microns / ELS_LEADSCREW_PITCH_UM * ELS_STEPS_PER_REV = steps
-    
-    // Use fixed-point math for precision:
-    // steps = (spindle_delta * pitch_um * ELS_STEPS_PER_REV * direction_mul) 
-    //         / (C_COUNTS_PER_REV * ELS_LEADSCREW_PITCH_UM)
-    
+    // Calculate base step output from spindle delta
     int64_t numerator = (int64_t)spindle_delta * (int64_t)pitch_um * 
                         (int64_t)ELS_STEPS_PER_REV * (int64_t)direction_mul * FP_SCALE;
     int64_t denominator = (int64_t)C_COUNTS_PER_REV * (int64_t)ELS_LEADSCREW_PITCH_UM;
     
     int64_t step_delta_fp = numerator / denominator;
+    
+    // ========================================================================
+    // SYNC CORRECTION - always calculate back to the 0/0 theoretical crossing
+    // sync_z_um = machine Z where display Z = 0
+    // sync_phase_ticks = machine spindle ticks where display C = 0°
+    // ========================================================================
+    if (sync_enabled && sync_in) {
+        constexpr int32_t COARSE_TOLERANCE_UM = 2000;  // 2mm - outside = STOP and re-sync
+        
+        // Calculate expected Z based on spindle delta from the 0/0 reference point
+        // At the 0/0 crossing: spindle = sync_phase_ticks, Z = sync_z_um
+        // Note: Sign is inverted because Z encoder direction is opposite to step output
+        const int64_t spindle_delta_from_zero = spindle_count - sync_phase_ticks;
+        const int64_t expected_z_num = spindle_delta_from_zero * (int64_t)pitch_um * (int64_t)direction_mul;
+        const int32_t expected_z = sync_z_um - (int32_t)(expected_z_num / (int64_t)C_COUNTS_PER_REV);
+        
+        // Error: positive = Z is ahead (too far), negative = Z is behind
+        const int32_t z_error = z_um - expected_z;
+        const int32_t abs_z_error = (z_error < 0) ? -z_error : z_error;
+        
+        static uint32_t last_sync_debug_ms = 0;
+        if (millis() - last_sync_debug_ms > 500) {
+            Serial.printf("[SYNC] err=%ld um%s\n", z_error, 
+                (abs_z_error > COARSE_TOLERANCE_UM) ? " LOST!" : "");
+            last_sync_debug_ms = millis();
+        }
+        
+        if (abs_z_error > COARSE_TOLERANCE_UM) {
+            // Major disturbance (half-nut disconnected?) - go RED, wait for re-sync
+            sync_in = false;
+            sync_waiting = true;
+            step_accumulator = 0;
+            return;  // Don't output steps until re-synced
+        }
+        
+        // TODO: Add fine tolerance correction to creep back to perfect alignment
+    }
     
     // Accumulate fractional steps
     step_accumulator += step_delta_fp;
@@ -347,7 +391,14 @@ void ElsCore::update() {
         step_accumulator -= (int64_t)steps_to_output * FP_SCALE;
         
 #if DEBUG_SPI_LOGGING
+        static uint32_t last_debug_ms = 0;
+        static int32_t total_steps_output = 0;
         total_steps_output += abs(steps_to_output);
+        if (millis() - last_debug_ms > 1000) {
+            Serial.printf("[ELS] steps_out=%ld\n", total_steps_output);
+            total_steps_output = 0;
+            last_debug_ms = millis();
+        }
 #endif
         
         // Output steps

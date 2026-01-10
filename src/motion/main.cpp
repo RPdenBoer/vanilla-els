@@ -25,6 +25,14 @@ static void motionTask(void *param) {
     TickType_t last_wake = xTaskGetTickCount();
     
     while (true) {
+		// Safety: Skip all motion control during OTA
+		if (OtaMotion::isActive()) {
+			SpindleStepper::stop();
+			ElsCore::setEnabled(false);
+			vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(10));
+			continue;
+		}
+
 		// Update linear encoders (X, Z)
 		EncoderMotion::update();
 

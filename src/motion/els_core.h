@@ -62,7 +62,8 @@ private:
     static bool sync_in;
     static int32_t sync_z_um;         // Reference Z0 (machine coordinates)
     static int32_t sync_phase_ticks;  // Reference C0 (raw ticks)
-    static int32_t sync_tolerance_out_um;
+    static int32_t sync_tolerance_out_um;   // Tolerance to drop out of sync (microns)
+    static int32_t sync_tolerance_in_ticks; // Tolerance for sync acquisition (ticks)
     static int32_t sync_ref_z_um;
     static int32_t sync_ref_spindle;
 	static int32_t last_z_um;
