@@ -344,19 +344,17 @@ void ElsCore::update() {
     int64_t step_delta_fp = numerator / denominator;
     
     // ========================================================================
-    // SYNC CORRECTION - always calculate back to the 0/0 theoretical crossing
-    // sync_z_um = machine Z where display Z = 0
-    // sync_phase_ticks = machine spindle ticks where display C = 0°
+    // SYNC CORRECTION - using reference point captured at acquisition
     // ========================================================================
     if (sync_enabled && sync_in) {
         constexpr int32_t COARSE_TOLERANCE_UM = 2000;  // 2mm - outside = STOP and re-sync
         
-        // Calculate expected Z based on spindle delta from the 0/0 reference point
-        // At the 0/0 crossing: spindle = sync_phase_ticks, Z = sync_z_um
+        // Calculate expected Z based on spindle delta FROM THE REFERENCE POINT
+        // At acquisition: sync_ref_z_um and sync_ref_spindle were captured
         // Note: Sign is inverted because Z encoder direction is opposite to step output
-        const int64_t spindle_delta_from_zero = spindle_count - sync_phase_ticks;
-        const int64_t expected_z_num = spindle_delta_from_zero * (int64_t)pitch_um * (int64_t)direction_mul;
-        const int32_t expected_z = sync_z_um - (int32_t)(expected_z_num / (int64_t)C_COUNTS_PER_REV);
+        const int64_t spindle_delta_from_ref = spindle_count - sync_ref_spindle;
+        const int64_t expected_z_num = spindle_delta_from_ref * (int64_t)pitch_um * (int64_t)direction_mul;
+        const int32_t expected_z = sync_ref_z_um - (int32_t)(expected_z_num / (int64_t)C_COUNTS_PER_REV);
         
         // Error: positive = Z is ahead (too far), negative = Z is behind
         const int32_t z_error = z_um - expected_z;
