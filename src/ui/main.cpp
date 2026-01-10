@@ -40,6 +40,8 @@ static void updateFromMotionBoard() {
 	const SyncStateProto sync_state = status.sync_state;
 	SyncProxy::setWaiting(sync_state == SyncStateProto::SYNC_WAITING);
 	SyncProxy::setInSync(sync_state == SyncStateProto::SYNC_IN_SYNC);
+    SyncProxy::setSpeedScalePermille(status.sync_speed_scale_permille);
+    SyncProxy::setAbsErrorUm(status.sync_abs_error_um);
 	OtaProxy::setMotionWifi(status.wifi_connected != 0);
 	OtaProxy::setMotionOtaActive(status.ota_active != 0);
 

@@ -312,24 +312,24 @@ void UIManager::createUI() {
 	lv_obj_set_style_border_color(btn_sync_ptr, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
 	lv_obj_set_style_text_color(btn_sync_ptr, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
 	lv_obj_set_style_bg_opa(btn_sync_ptr, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_CHECKED);
-	lv_obj_set_style_bg_color(btn_sync_ptr, lv_palette_darken(LV_PALETTE_GREY, 3), LV_PART_MAIN | LV_STATE_CHECKED);
-	lv_obj_set_style_border_color(btn_sync_ptr, lv_palette_darken(LV_PALETTE_GREY, 3), LV_PART_MAIN | LV_STATE_CHECKED);
-	lv_obj_set_style_text_color(btn_sync_ptr, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN | LV_STATE_CHECKED);
+	lv_obj_set_style_bg_color(btn_sync_ptr, lv_palette_darken(LV_PALETTE_RED, 1), LV_PART_MAIN | LV_STATE_CHECKED);
+	lv_obj_set_style_border_color(btn_sync_ptr, lv_palette_darken(LV_PALETTE_RED, 1), LV_PART_MAIN | LV_STATE_CHECKED);
+	lv_obj_set_style_text_color(btn_sync_ptr, lv_color_white(), LV_PART_MAIN | LV_STATE_CHECKED);
 	lv_obj_set_style_bg_opa(btn_sync_ptr, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_USER_1);
-	lv_obj_set_style_bg_color(btn_sync_ptr, endstop_active_color(), LV_PART_MAIN | LV_STATE_USER_1);
-	lv_obj_set_style_border_color(btn_sync_ptr, endstop_active_color(), LV_PART_MAIN | LV_STATE_USER_1);
+	lv_obj_set_style_bg_color(btn_sync_ptr, lv_palette_darken(LV_PALETTE_ORANGE, 2), LV_PART_MAIN | LV_STATE_USER_1);
+	lv_obj_set_style_border_color(btn_sync_ptr, lv_palette_darken(LV_PALETTE_ORANGE, 2), LV_PART_MAIN | LV_STATE_USER_1);
 	lv_obj_set_style_text_color(btn_sync_ptr, lv_color_white(), LV_PART_MAIN | LV_STATE_USER_1);
 	lv_obj_set_style_bg_opa(btn_sync_ptr, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_USER_1 | LV_STATE_CHECKED);
-	lv_obj_set_style_bg_color(btn_sync_ptr, endstop_active_color(), LV_PART_MAIN | LV_STATE_USER_1 | LV_STATE_CHECKED);
-	lv_obj_set_style_border_color(btn_sync_ptr, endstop_active_color(), LV_PART_MAIN | LV_STATE_USER_1 | LV_STATE_CHECKED);
+	lv_obj_set_style_bg_color(btn_sync_ptr, lv_palette_darken(LV_PALETTE_ORANGE, 2), LV_PART_MAIN | LV_STATE_USER_1 | LV_STATE_CHECKED);
+	lv_obj_set_style_border_color(btn_sync_ptr, lv_palette_darken(LV_PALETTE_ORANGE, 2), LV_PART_MAIN | LV_STATE_USER_1 | LV_STATE_CHECKED);
 	lv_obj_set_style_text_color(btn_sync_ptr, lv_color_white(), LV_PART_MAIN | LV_STATE_USER_1 | LV_STATE_CHECKED);
 	lv_obj_set_style_bg_opa(btn_sync_ptr, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_USER_2);
-	lv_obj_set_style_bg_color(btn_sync_ptr, endstop_hit_color(), LV_PART_MAIN | LV_STATE_USER_2);
-	lv_obj_set_style_border_color(btn_sync_ptr, endstop_hit_color(), LV_PART_MAIN | LV_STATE_USER_2);
+	lv_obj_set_style_bg_color(btn_sync_ptr, lv_palette_darken(LV_PALETTE_GREEN, 2), LV_PART_MAIN | LV_STATE_USER_2);
+	lv_obj_set_style_border_color(btn_sync_ptr, lv_palette_darken(LV_PALETTE_GREEN, 2), LV_PART_MAIN | LV_STATE_USER_2);
 	lv_obj_set_style_text_color(btn_sync_ptr, lv_color_white(), LV_PART_MAIN | LV_STATE_USER_2);
 	lv_obj_set_style_bg_opa(btn_sync_ptr, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_USER_2 | LV_STATE_CHECKED);
-	lv_obj_set_style_bg_color(btn_sync_ptr, endstop_hit_color(), LV_PART_MAIN | LV_STATE_USER_2 | LV_STATE_CHECKED);
-	lv_obj_set_style_border_color(btn_sync_ptr, endstop_hit_color(), LV_PART_MAIN | LV_STATE_USER_2 | LV_STATE_CHECKED);
+	lv_obj_set_style_bg_color(btn_sync_ptr, lv_palette_darken(LV_PALETTE_GREEN, 2), LV_PART_MAIN | LV_STATE_USER_2 | LV_STATE_CHECKED);
+	lv_obj_set_style_border_color(btn_sync_ptr, lv_palette_darken(LV_PALETTE_GREEN, 2), LV_PART_MAIN | LV_STATE_USER_2 | LV_STATE_CHECKED);
 	lv_obj_set_style_text_color(btn_sync_ptr, lv_color_white(), LV_PART_MAIN | LV_STATE_USER_2 | LV_STATE_CHECKED);
 	apply_button_common_style(btn_sync_ptr);
 	lv_obj_t *lbl_sync = lv_label_create(btn_sync_ptr);
@@ -973,20 +973,39 @@ void UIManager::updateSyncButtonStates()
 {
 	if (!btn_sync_ptr)
 		return;
-	if (SyncProxy::isEnabled())
-		lv_obj_add_state(btn_sync_ptr, LV_STATE_CHECKED);
-	else
+
+	if (!SyncProxy::isEnabled())
+	{
 		lv_obj_clear_state(btn_sync_ptr, LV_STATE_CHECKED);
-
-	if (SyncProxy::isWaiting())
-		lv_obj_add_state(btn_sync_ptr, LV_STATE_USER_1);
-	else
 		lv_obj_clear_state(btn_sync_ptr, LV_STATE_USER_1);
-
-	if (SyncProxy::isInSync())
-		lv_obj_add_state(btn_sync_ptr, LV_STATE_USER_2);
-	else
 		lv_obj_clear_state(btn_sync_ptr, LV_STATE_USER_2);
+		return;
+	}
+
+	// Sync enabled: show red/orange/green based on current speed correction.
+	// Color meaning is based on actual sync error magnitude (microns).
+	lv_obj_add_state(btn_sync_ptr, LV_STATE_CHECKED);
+
+	const uint16_t abs_err_um = SyncProxy::getAbsErrorUm();
+	static constexpr uint16_t GREEN_ERR_UM = 100;
+	static constexpr uint16_t ORANGE_ERR_UM = 500;
+
+	if (abs_err_um <= GREEN_ERR_UM)
+	{
+		lv_obj_clear_state(btn_sync_ptr, LV_STATE_USER_1);
+		lv_obj_add_state(btn_sync_ptr, LV_STATE_USER_2);
+	}
+	else if (abs_err_um <= ORANGE_ERR_UM)
+	{
+		lv_obj_add_state(btn_sync_ptr, LV_STATE_USER_1);
+		lv_obj_clear_state(btn_sync_ptr, LV_STATE_USER_2);
+	}
+	else
+	{
+		// Red (base checked style)
+		lv_obj_clear_state(btn_sync_ptr, LV_STATE_USER_1);
+		lv_obj_clear_state(btn_sync_ptr, LV_STATE_USER_2);
+	}
 }
 
 void UIManager::forceElsOff() {

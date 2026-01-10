@@ -27,10 +27,18 @@ public:
     static void setInSync(bool in_sync);
     static bool isInSync() { return in_sync; }
 
+	static void setSpeedScalePermille(uint16_t permille);
+	static uint16_t getSpeedScalePermille() { return speed_scale_permille; }
+
+    static void setAbsErrorUm(uint16_t um);
+    static uint16_t getAbsErrorUm() { return abs_error_um; }
+
 private:
     static int32_t sync_z_um;
     static bool enabled;
     static bool waiting;
     static bool in_sync;
     static bool has_value;
+	static uint16_t speed_scale_permille;
+    static uint16_t abs_error_um;
 };

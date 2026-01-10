@@ -30,6 +30,9 @@ int32_t ElsCore::sync_tolerance_out_um = 25;
 int32_t ElsCore::sync_tolerance_in_ticks = 8;  // ~1.8 degrees tolerance for sync acquisition
 int32_t ElsCore::sync_ref_z_um = 0;
 int32_t ElsCore::sync_ref_spindle = 0;
+int32_t ElsCore::sync_speed_scale_fp = 65536;
+uint32_t ElsCore::sync_last_adjust_ms = 0;
+uint16_t ElsCore::sync_abs_error_um = 0;
 int32_t ElsCore::last_z_um = 0;
 volatile bool ElsCore::jog_active = false;
 volatile int8_t ElsCore::jog_dir = 0;
@@ -51,39 +54,20 @@ static constexpr int64_t JOG_STEPS_PER_US_FP =
 	(int64_t)ELS_JOG_MM_PER_MIN * 1000LL * (int64_t)ELS_STEPS_PER_REV * FP_SCALE /
 	(60LL * 1000000LL * (int64_t)ELS_LEADSCREW_PITCH_UM);
 
-static inline int32_t wrap_phase(int32_t count) {
-	int32_t r = count % C_COUNTS_PER_REV;
-	if (r < 0) r += C_COUNTS_PER_REV;
-	return r;
+static inline int32_t abs_i32(int32_t v) { return (v < 0) ? -v : v; }
+
+uint16_t ElsCore::getSyncSpeedScalePermille()
+{
+	// sync_speed_scale_fp is fixed-point with FP_SCALE (= 65536) meaning 1.0x.
+	int64_t permille = ((int64_t)sync_speed_scale_fp * 1000LL) / FP_SCALE;
+	if (permille < 0) permille = 0;
+	if (permille > 65535) permille = 65535;
+	return (uint16_t)permille;
 }
 
-// Check if two phases are within tolerance (handles wrap-around)
-static inline bool phase_within_tolerance(int32_t phase_a, int32_t phase_b, int32_t tolerance) {
-	int32_t diff = phase_a - phase_b;
-	if (diff < 0) diff = -diff;
-	// Handle wrap-around: if diff > half revolution, measure the other way
-	if (diff > C_COUNTS_PER_REV / 2) diff = C_COUNTS_PER_REV - diff;
-	return diff <= tolerance;
-}
-
-static inline bool crossed_phase(int32_t prev, int32_t curr, int32_t target_phase) {
-	const int32_t delta = curr - prev;
-	if (delta == 0) return false;
-	if (delta >= C_COUNTS_PER_REV || delta <= -C_COUNTS_PER_REV) return true;
-
-	const int32_t prev_phase = wrap_phase(prev);
-	const int32_t curr_phase = wrap_phase(curr);
-	const int32_t target = wrap_phase(target_phase);
-
-	if (prev_phase == target || curr_phase == target) return true;
-
-	if (delta > 0) {
-		if (prev_phase < curr_phase) return (target > prev_phase && target < curr_phase);
-		return (target > prev_phase || target < curr_phase);
-	}
-
-	if (prev_phase > curr_phase) return (target < prev_phase && target > curr_phase);
-	return (target < prev_phase || target > curr_phase);
+uint16_t ElsCore::getSyncAbsErrorUm()
+{
+	return sync_abs_error_um;
 }
 
 void ElsCore::init() {
@@ -97,6 +81,9 @@ void ElsCore::init() {
 	sync_in = false;
 	sync_ref_z_um = 0;
 	sync_ref_spindle = 0;
+	sync_speed_scale_fp = (int32_t)FP_SCALE;
+	sync_last_adjust_ms = millis();
+	sync_abs_error_um = 0;
 	last_z_um = EncoderMotion::getZCount() * Z_UM_PER_COUNT;
 	jog_active = false;
 	jog_dir = 0;
@@ -119,20 +106,26 @@ void ElsCore::setEnabled(bool on) {
 	if (!enabled) {
 		sync_waiting = false;
 		sync_in = false;
+		sync_speed_scale_fp = (int32_t)FP_SCALE;
+		sync_abs_error_um = 0;
 	} else if (sync_enabled && !was_enabled) {
-		// Only reset sync when transitioning from disabled to enabled
-		sync_waiting = true;
+		// Continuous sync: keep moving; reset controller state on enable
+		sync_waiting = false;
 		sync_in = false;
+		sync_speed_scale_fp = (int32_t)FP_SCALE;
+		sync_last_adjust_ms = millis();
+		sync_abs_error_um = 0;
 	}
 }
 
 void ElsCore::setPitchUm(int32_t pitch) {
     if (pitch == pitch_um) return;
     pitch_um = pitch;
-    // Pitch changed - need to re-sync
 	if (sync_enabled && enabled) {
-		sync_waiting = true;
+		sync_waiting = false;
 		sync_in = false;
+		sync_speed_scale_fp = (int32_t)FP_SCALE;
+		sync_last_adjust_ms = millis();
 	}
 }
 
@@ -141,8 +134,10 @@ void ElsCore::setDirectionMul(int8_t mul) {
 	if (new_mul == direction_mul) return;
     direction_mul = new_mul;
 	if (sync_enabled && enabled) {
-		sync_waiting = true;
+		sync_waiting = false;
 		sync_in = false;
+		sync_speed_scale_fp = (int32_t)FP_SCALE;
+		sync_last_adjust_ms = millis();
 	}
 }
 
@@ -159,38 +154,26 @@ void ElsCore::setJog(int8_t dir, bool active)
 }
 
 void ElsCore::setSync(bool enabled, int32_t z_um, int32_t c_ticks) {
-	const bool was_enabled = sync_enabled;
+	const bool enabled_changed = (enabled != sync_enabled);
+	const bool ref_changed = (z_um != sync_z_um) || (c_ticks != sync_phase_ticks);
+
+	// NOTE: setSync() is invoked frequently via SPI commands.
+	// Do NOT reset controller state unless something actually changed, otherwise
+	// the trim will be stuck at 1.000x and sync will appear to do nothing.
 	sync_enabled = enabled;
-	
-	if (!sync_enabled) {
-		sync_waiting = false;
-		sync_in = false;
-		sync_z_um = z_um;
-		sync_phase_ticks = c_ticks;
-		return;
-	}
-	
-	// Only reset sync if parameters changed significantly or sync was just enabled
-	// Small variations in parameters (due to rounding etc) shouldn't reset sync
-	const int32_t z_diff = (z_um > sync_z_um) ? (z_um - sync_z_um) : (sync_z_um - z_um);
-	int32_t phase_diff = (c_ticks > sync_phase_ticks) ? (c_ticks - sync_phase_ticks) : (sync_phase_ticks - c_ticks);
-	if (phase_diff > C_COUNTS_PER_REV / 2) phase_diff = C_COUNTS_PER_REV - phase_diff;
-	
-	const bool params_changed = (z_diff > 100) || (phase_diff > 8);  // 100um or ~2 degrees
-	
-	if (!was_enabled || params_changed) {
-#if DEBUG_SPI_LOGGING
-		if (sync_in) {
-			Serial.printf("[SYNC] Reset! was_en=%d, z_diff=%ld, phase_diff=%ld\n",
-				was_enabled, z_diff, phase_diff);
-		}
-#endif
-		sync_in = false;
-		sync_waiting = ElsCore::enabled;
-	}
-	
 	sync_z_um = z_um;
 	sync_phase_ticks = c_ticks;
+
+	if (enabled_changed || ref_changed)
+	{
+		// Continuous sync: no waiting/acquire state. We always run ELS normally and
+		// apply a bounded speed trim to converge toward the theoretical 0/0 crossing.
+		sync_waiting = false;
+		sync_in = false;
+		sync_speed_scale_fp = (int32_t)FP_SCALE;
+		sync_last_adjust_ms = millis();
+		sync_abs_error_um = 0;
+	}
 }
 
 void ElsCore::setEndstops(int32_t min_um, int32_t max_um, bool min_en, bool max_en) {
@@ -225,8 +208,10 @@ void ElsCore::update() {
 			step_accumulator = 0;
 			if (sync_enabled)
 			{
-				sync_waiting = true;
+				sync_waiting = false;
 				sync_in = false;
+				sync_speed_scale_fp = (int32_t)FP_SCALE;
+				sync_last_adjust_ms = millis();
 			}
 		}
 
@@ -260,8 +245,10 @@ void ElsCore::update() {
 		step_accumulator = 0;
 		if (sync_enabled && enabled)
 		{
-			sync_waiting = true;
+			sync_waiting = false;
 			sync_in = false;
+			sync_speed_scale_fp = (int32_t)FP_SCALE;
+			sync_last_adjust_ms = millis();
 		}
 	}
 
@@ -271,60 +258,8 @@ void ElsCore::update() {
 	int32_t spindle_count = getSpindlePosition();
 	const int32_t z_um = EncoderMotion::getZCount() * Z_UM_PER_COUNT;
 
-	if (sync_enabled) {
-		if (sync_waiting) {
-			if (pitch_um == 0) {
-				sync_waiting = false;
-				sync_in = false;
-			} else {
-				const int64_t phase_num = (int64_t)(z_um - sync_z_um) *
-										  (int64_t)C_COUNTS_PER_REV *
-										  (int64_t)direction_mul;
-				const int32_t phase_delta = (int32_t)(phase_num / (int64_t)pitch_um);
-				const int32_t target_phase = wrap_phase(sync_phase_ticks + phase_delta);
-				const int32_t current_phase = wrap_phase(spindle_count);
-				
-				// Debug: log acquisition attempt every 500ms
-				static uint32_t last_acq_debug_ms = 0;
-				if (millis() - last_acq_debug_ms > 500) {
-					Serial.printf("[ACQ] z=%ld, z_ref=%ld, phase_d=%ld, tgt=%ld, cur=%ld, diff=%ld\n",
-						z_um, sync_z_um, phase_delta, target_phase, current_phase,
-						(current_phase - target_phase));
-					last_acq_debug_ms = millis();
-				}
-				
-				// Check if we're within tolerance OR crossed through the target
-				const bool at_target = phase_within_tolerance(current_phase, target_phase, sync_tolerance_in_ticks);
-				const bool crossed_target = crossed_phase(last_spindle_count, spindle_count, target_phase);
-				
-				if (!at_target && !crossed_target) {
-					last_spindle_count = spindle_count;
-					last_z_um = z_um;
-					return;
-				}
-				
-				// Sync acquired!
-				sync_waiting = false;
-				sync_in = true;
-				sync_ref_z_um = z_um;
-				sync_ref_spindle = spindle_count - (current_phase - target_phase);
-				last_spindle_count = spindle_count;
-				step_accumulator = 0;
-				
-				// Log acquisition details
-				Serial.printf("[ACQ] LOCKED! z=%ld, tgt_phase=%ld, cur_phase=%ld, snap_spindle=%ld\n",
-					z_um, target_phase, current_phase, sync_ref_spindle);
-			}
-		} else if (!sync_in) {
-			sync_waiting = true;
-			last_spindle_count = spindle_count;
-			last_z_um = z_um;
-			step_accumulator = 0;
-			return;
-		}
-
-		// If sync_in, continue to step output below
-	}
+	// Continuous sync: no waiting/acquire path. Always run step output below.
+	sync_waiting = false;
 
 	// ========================================================================
 	// STEP OUTPUT - with sync correction if enabled
@@ -352,41 +287,79 @@ void ElsCore::update() {
     int64_t step_delta_fp = numerator / denominator;
 
 	// ========================================================================
-	// SYNC CORRECTION - using reference point captured at acquisition
+	// SYNC SPEED TRIM (continuous)
+	// - Always keep outputting ELS steps from spindle motion.
+	// - If sync is enabled, compute expected Z from the theoretical 0/0 crossing
+	//   and apply a bounded speed trim (±50%) to converge.
 	// ========================================================================
-	if (sync_enabled && sync_in) {
-        constexpr int32_t COARSE_TOLERANCE_UM = 500;  // 0.5mm - well under 1 thread pitch (2mm)
+	if (sync_enabled && pitch_um != 0)
+	{
+		const int32_t sync_scale_min_fp = (int32_t)((FP_SCALE * (int64_t)SYNC_SPEED_MIN_PCT) / 100);
+		const int32_t sync_scale_max_fp = (int32_t)((FP_SCALE * (int64_t)SYNC_SPEED_MAX_PCT) / 100);
 
-		// Calculate expected Z based on spindle delta FROM THE REFERENCE POINT
-		// At acquisition: sync_ref_z_um and sync_ref_spindle were captured
-		// Note: Sign is inverted because Z encoder direction is opposite to step output
-		const int64_t spindle_delta_from_ref = spindle_count - sync_ref_spindle;
-		const int64_t expected_z_num = spindle_delta_from_ref * (int64_t)pitch_um * (int64_t)direction_mul;
-		const int32_t expected_z = sync_ref_z_um - (int32_t)(expected_z_num / (int64_t)C_COUNTS_PER_REV);
+		// Expected Z based on spindle position relative to the 0/0 reference.
+		// Note: Sign is inverted because Z encoder direction is opposite to step output.
+		const int64_t spindle_from_c0 = (int64_t)spindle_count - (int64_t)sync_phase_ticks;
+		const int64_t expected_z_num = spindle_from_c0 * (int64_t)pitch_um * (int64_t)direction_mul;
+		const int32_t expected_z = sync_z_um - (int32_t)(expected_z_num / (int64_t)C_COUNTS_PER_REV);
+		const int32_t z_error = z_um - expected_z;
+		const int32_t abs_z_error = abs_i32(z_error);
+		sync_abs_error_um = (abs_z_error > 65535) ? 65535 : (uint16_t)abs_z_error;
 
-		// Error: positive = Z is ahead (too far), negative = Z is behind
-        const int32_t z_error = z_um - expected_z;
-        const int32_t abs_z_error = (z_error < 0) ? -z_error : z_error;
-        
-        static uint32_t last_sync_debug_ms = 0;
-        if (millis() - last_sync_debug_ms > 500) {
-            Serial.printf("[SYNC] err=%ld um%s\n", z_error, 
-                (abs_z_error > COARSE_TOLERANCE_UM) ? " LOST!" : "");
-            last_sync_debug_ms = millis();
-        }
-        
-        if (abs_z_error > COARSE_TOLERANCE_UM) {
-            // Major disturbance (half-nut disconnected?) - go RED, wait for re-sync
-            sync_in = false;
-            sync_waiting = true;
-            step_accumulator = 0;
-            return;  // Don't output steps until re-synced
-        }
-        
-        // TODO: Add fine tolerance correction to creep back to perfect alignment
-    }
-    
-    // Accumulate fractional steps
+#if DEBUG_SPI_LOGGING
+		static uint32_t last_sync_dbg_ms = 0;
+		if ((uint32_t)(millis() - last_sync_dbg_ms) >= 1000) {
+			last_sync_dbg_ms = millis();
+			Serial.printf("[SYNC] err_um=%ld scale=%u/1000 Z=%ld expZ=%ld C=%ld c0=%ld\n",
+				(long)z_error,
+				(unsigned)ElsCore::getSyncSpeedScalePermille(),
+				(long)z_um,
+				(long)expected_z,
+				(long)spindle_count,
+				(long)sync_phase_ticks);
+		}
+#endif
+
+		// Hysteresis for UI state: in-sync means "close enough".
+		if (sync_in) {
+			if (abs_z_error > SYNC_OUT_TOL_UM) sync_in = false;
+		} else {
+			if (abs_z_error <= SYNC_IN_TOL_UM) sync_in = true;
+		}
+
+		const uint32_t now_ms = millis();
+		if ((uint32_t)(now_ms - sync_last_adjust_ms) >= SYNC_ADJUST_INTERVAL_MS)
+		{
+			sync_last_adjust_ms = now_ms;
+
+			int32_t target_scale_fp = (int32_t)FP_SCALE;
+			if (abs_z_error > SYNC_DEADBAND_UM)
+			{
+				// error_frac_fp ~= (z_error / pitch) in fixed-point
+				const int64_t error_frac_fp = ((int64_t)z_error * (int64_t)FP_SCALE) / (int64_t)pitch_um;
+				const int64_t correction_fp = -((error_frac_fp * (int64_t)SYNC_K_NUM) / (int64_t)SYNC_K_DEN);
+				int64_t scale_fp_64 = (int64_t)FP_SCALE + correction_fp;
+				if (scale_fp_64 < (int64_t)sync_scale_min_fp) scale_fp_64 = (int64_t)sync_scale_min_fp;
+				if (scale_fp_64 > (int64_t)sync_scale_max_fp) scale_fp_64 = (int64_t)sync_scale_max_fp;
+				target_scale_fp = (int32_t)scale_fp_64;
+			}
+
+			// Smooth the scale to avoid oscillations.
+			sync_speed_scale_fp += (target_scale_fp - sync_speed_scale_fp) / SYNC_SMOOTH_DEN;
+		}
+
+		// Apply current scale to the step delta (fixed-point).
+		step_delta_fp = ((int64_t)step_delta_fp * (int64_t)sync_speed_scale_fp) / (int64_t)FP_SCALE;
+	}
+	else
+	{
+		// Sync disabled or invalid pitch: run nominal.
+		sync_in = false;
+		sync_speed_scale_fp = (int32_t)FP_SCALE;
+		sync_abs_error_um = 0;
+	}
+
+	// Accumulate fractional steps
     step_accumulator += step_delta_fp;
     
     // Extract whole steps

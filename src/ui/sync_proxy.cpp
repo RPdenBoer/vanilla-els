@@ -9,6 +9,8 @@ bool SyncProxy::enabled = false;
 bool SyncProxy::waiting = false;
 bool SyncProxy::in_sync = false;
 bool SyncProxy::has_value = true;
+uint16_t SyncProxy::speed_scale_permille = 1000;
+uint16_t SyncProxy::abs_error_um = 0;
 
 static int32_t getZeroMachineUmForTool(int tool_index) {
     int off = OffsetManager::getCurrentOffset();
@@ -24,6 +26,8 @@ void SyncProxy::init() {
     waiting = false;
     in_sync = false;
     has_value = true;
+	speed_scale_permille = 1000;
+    abs_error_um = 0;
 }
 
 void SyncProxy::setFromCurrentZ() {
@@ -81,4 +85,14 @@ void SyncProxy::setWaiting(bool is_waiting) {
 void SyncProxy::setInSync(bool is_in_sync) {
 	in_sync = is_in_sync && enabled;
 	if (in_sync) waiting = false;
+}
+
+void SyncProxy::setSpeedScalePermille(uint16_t permille)
+{
+    speed_scale_permille = permille;
+}
+
+void SyncProxy::setAbsErrorUm(uint16_t um)
+{
+    abs_error_um = um;
 }

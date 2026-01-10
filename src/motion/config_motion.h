@@ -83,6 +83,34 @@ static constexpr uint32_t ELS_RMT_RES_HZ = 1000000;  // 1 MHz tick -> 1us resolu
 static constexpr int32_t  ELS_RMT_CHUNK_STEPS = 200; // keep small to reduce phase lag
 
 // ============================================================================
+// Continuous Sync (ELS speed trim)
+// ============================================================================
+// Sync runs continuously when enabled: it trims the ELS step output by a bounded
+// multiplier to converge toward the theoretical Z/C 0/0 crossing reference.
+//
+// How often to update the trim controller (ms)
+static constexpr uint32_t SYNC_ADJUST_INTERVAL_MS = 50;
+
+// Don't adjust for very small errors (microns)
+static constexpr int32_t SYNC_DEADBAND_UM = 50;
+
+// Sync state hysteresis thresholds (microns)
+static constexpr int32_t SYNC_IN_TOL_UM = 100;
+static constexpr int32_t SYNC_OUT_TOL_UM = 200;
+
+// Clamp speed trim multiplier range (percent of nominal)
+static constexpr int32_t SYNC_SPEED_MIN_PCT = 50;   // 0.5x
+static constexpr int32_t SYNC_SPEED_MAX_PCT = 150;  // 1.5x
+
+// Proportional gain K = SYNC_K_NUM / SYNC_K_DEN applied to (z_error / pitch)
+static constexpr int32_t SYNC_K_NUM = 1;
+static constexpr int32_t SYNC_K_DEN = 4;
+
+// Smoothing factor for the scale update: new += (target-new)/SYNC_SMOOTH_DEN
+// Larger = slower response, less risk of oscillation.
+static constexpr int32_t SYNC_SMOOTH_DEN = 4;
+
+// ============================================================================
 // SPI Slave pins (communication with UI board)
 // ============================================================================
 static constexpr int SPI_SLAVE_MOSI = 23;

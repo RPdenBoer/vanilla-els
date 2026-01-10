@@ -11,7 +11,7 @@
 static constexpr size_t PROTOCOL_PACKET_SIZE = 32;
 
 // Protocol version for compatibility checking
-static constexpr uint8_t PROTOCOL_VERSION = 9;
+static constexpr uint8_t PROTOCOL_VERSION = 11;
 
 // ============================================================================
 // MPG Mode (Manual Pulse Generator routing)
@@ -113,7 +113,8 @@ struct __attribute__((packed)) StatusPacket {
 	int16_t target_rpm;			  // Target RPM from MPG     [2]
 	uint8_t ota_active;			  // OTA mode active         [1]
 	uint8_t wifi_connected;		  // WiFi connected          [1]
-	uint8_t reserved2[4];		  // Padding                 [4]
+	uint16_t sync_speed_scale_permille; // ELS sync speed scale (1000 = 1.000x) [2]
+	uint16_t sync_abs_error_um;  // |Z_actual - Z_expected| for sync (microns) [2]
 
 	uint8_t sequence;             // Echo of command seq     [1]
     uint8_t checksum;             // XOR checksum            [1]

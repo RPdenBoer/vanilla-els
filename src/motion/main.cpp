@@ -185,10 +185,11 @@ void loop() {
 	status.flags.sync_waiting = ElsCore::isSyncWaiting();
 	status.ota_active = OtaMotion::isActive() ? 1 : 0;
 	status.wifi_connected = OtaMotion::isWifiConnected() ? 1 : 0;
+	status.sync_speed_scale_permille = ElsCore::getSyncSpeedScalePermille();
+	status.sync_abs_error_um = ElsCore::getSyncAbsErrorUm();
 	status.sync_state = SyncStateProto::SYNC_DISABLED;
 	if (ElsCore::isSyncEnabled()) {
 		if (!ElsCore::isEnabled()) status.sync_state = SyncStateProto::SYNC_OUT_OF_SYNC;
-		else if (ElsCore::isSyncWaiting()) status.sync_state = SyncStateProto::SYNC_WAITING;
 		else if (ElsCore::isSyncIn()) status.sync_state = SyncStateProto::SYNC_IN_SYNC;
 		else status.sync_state = SyncStateProto::SYNC_OUT_OF_SYNC;
 	}
