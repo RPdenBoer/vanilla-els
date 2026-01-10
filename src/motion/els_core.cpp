@@ -284,6 +284,15 @@ void ElsCore::update() {
 				const int32_t target_phase = wrap_phase(sync_phase_ticks + phase_delta);
 				const int32_t current_phase = wrap_phase(spindle_count);
 				
+				// Debug: log acquisition attempt every 500ms
+				static uint32_t last_acq_debug_ms = 0;
+				if (millis() - last_acq_debug_ms > 500) {
+					Serial.printf("[ACQ] z=%ld, z_ref=%ld, phase_d=%ld, tgt=%ld, cur=%ld, diff=%ld\n",
+						z_um, sync_z_um, phase_delta, target_phase, current_phase,
+						(current_phase - target_phase));
+					last_acq_debug_ms = millis();
+				}
+				
 				// Check if we're within tolerance OR crossed through the target
 				const bool at_target = phase_within_tolerance(current_phase, target_phase, sync_tolerance_in_ticks);
 				const bool crossed_target = crossed_phase(last_spindle_count, spindle_count, target_phase);
@@ -294,18 +303,17 @@ void ElsCore::update() {
 					return;
 				}
 				
-				// Sync acquired! Adjust ref to align perfectly with target phase
+				// Sync acquired!
 				sync_waiting = false;
 				sync_in = true;
 				sync_ref_z_um = z_um;
-				// Snap to exact target phase to avoid accumulated error
 				sync_ref_spindle = spindle_count - (current_phase - target_phase);
 				last_spindle_count = spindle_count;
 				step_accumulator = 0;
-#if DEBUG_SPI_LOGGING
-				Serial.printf("[SYNC] Acquired! z=%ld, ref_spindle=%ld\n",
-					z_um, sync_ref_spindle);
-#endif
+				
+				// Log acquisition details
+				Serial.printf("[ACQ] LOCKED! z=%ld, tgt_phase=%ld, cur_phase=%ld, snap_spindle=%ld\n",
+					z_um, target_phase, current_phase, sync_ref_spindle);
 			}
 		} else if (!sync_in) {
 			sync_waiting = true;
@@ -342,21 +350,21 @@ void ElsCore::update() {
     int64_t denominator = (int64_t)C_COUNTS_PER_REV * (int64_t)ELS_LEADSCREW_PITCH_UM;
     
     int64_t step_delta_fp = numerator / denominator;
-    
-    // ========================================================================
-    // SYNC CORRECTION - using reference point captured at acquisition
-    // ========================================================================
-    if (sync_enabled && sync_in) {
-        constexpr int32_t COARSE_TOLERANCE_UM = 2000;  // 2mm - outside = STOP and re-sync
-        
-        // Calculate expected Z based on spindle delta FROM THE REFERENCE POINT
-        // At acquisition: sync_ref_z_um and sync_ref_spindle were captured
-        // Note: Sign is inverted because Z encoder direction is opposite to step output
-        const int64_t spindle_delta_from_ref = spindle_count - sync_ref_spindle;
-        const int64_t expected_z_num = spindle_delta_from_ref * (int64_t)pitch_um * (int64_t)direction_mul;
-        const int32_t expected_z = sync_ref_z_um - (int32_t)(expected_z_num / (int64_t)C_COUNTS_PER_REV);
-        
-        // Error: positive = Z is ahead (too far), negative = Z is behind
+
+	// ========================================================================
+	// SYNC CORRECTION - using reference point captured at acquisition
+	// ========================================================================
+	if (sync_enabled && sync_in) {
+        constexpr int32_t COARSE_TOLERANCE_UM = 500;  // 0.5mm - well under 1 thread pitch (2mm)
+
+		// Calculate expected Z based on spindle delta FROM THE REFERENCE POINT
+		// At acquisition: sync_ref_z_um and sync_ref_spindle were captured
+		// Note: Sign is inverted because Z encoder direction is opposite to step output
+		const int64_t spindle_delta_from_ref = spindle_count - sync_ref_spindle;
+		const int64_t expected_z_num = spindle_delta_from_ref * (int64_t)pitch_um * (int64_t)direction_mul;
+		const int32_t expected_z = sync_ref_z_um - (int32_t)(expected_z_num / (int64_t)C_COUNTS_PER_REV);
+
+		// Error: positive = Z is ahead (too far), negative = Z is behind
         const int32_t z_error = z_um - expected_z;
         const int32_t abs_z_error = (z_error < 0) ? -z_error : z_error;
         
