@@ -34,10 +34,6 @@ static constexpr int32_t ELS_LEADSCREW_PITCH_UM = 2000;
 static constexpr int32_t X_UM_PER_COUNT = 5;
 static constexpr int32_t Z_UM_PER_COUNT = 5;
 
-// RPM switching thresholds (add hysteresis to avoid flicker)
-static constexpr int RPM_SHOW_RPM_ON  = 60;  // above this -> show RPM on C row
-static constexpr int RPM_SHOW_RPM_OFF = 45;  // below this -> show degrees on C row
-
 // SPI communication settings
 // 64 bytes @ 1 MHz = ~512 µs per transaction, plenty fast for 100 Hz polling
 static constexpr uint32_t SPI_CLOCK_HZ = 1000000;   // 1 MHz SPI clock (reliable over wires)

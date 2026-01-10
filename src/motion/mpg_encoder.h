@@ -5,14 +5,14 @@
 
 // ============================================================================
 // MPG Encoder: Manual Pulse Generator for speed control and axis jogging
-// Uses GPIO ISR for quadrature decoding (input-only pins don't support PCNT)
+// Uses GPIO ISR for quadrature decoding
 // ============================================================================
 
 // MPG operating modes
 enum class MpgMode : uint8_t {
-    RPM_CONTROL = 0,  // Default: controls spindle RPM (0-200 counts = 0-3000 RPM)
+    RPM_CONTROL = 0,  // Default: controls spindle RPM (MPG sets target speed)
     JOG_Z,            // Jog Z axis (each pulse = step)
-    JOG_C,            // Jog C axis / spindle position
+    JOG_C,            // Jog C axis / spindle position (exclusive with spindle running)
 };
 
 class MpgEncoder {

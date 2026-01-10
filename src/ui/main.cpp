@@ -34,7 +34,8 @@ static void updateFromMotionBoard() {
 
 	// Update encoder proxy with spindle data and MPG state
 	EncoderProxy::updateFromMotion(status.c_count, status.rpm_signed,
-								   status.target_rpm, status.flags.mpg_mode);
+								   status.target_rpm, status.flags.mpg_mode,
+								   status.flags.spindle_moving);
 
 	const SyncStateProto sync_state = status.sync_state;
 	SyncProxy::setWaiting(sync_state == SyncStateProto::SYNC_WAITING);

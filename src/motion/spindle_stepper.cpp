@@ -335,6 +335,54 @@ void SpindleStepper::update() {
 }
 
 // ============================================================================
+// Immediate stepping for MPG jog mode
+// ============================================================================
+void SpindleStepper::stepImmediate(int32_t count) {
+    if (count == 0 || !rmt_ready) return;
+    
+    // Stop continuous loop if running
+    if (running) {
+        rmtWriteLooping(SPINDLE_STEP_PIN, nullptr, 0);
+    }
+    
+    // Set direction
+    bool forward = (count > 0);
+    bool dir_level = forward;
+    if (SPINDLE_INVERT_DIR) dir_level = !dir_level;
+    digitalWrite(SPINDLE_DIR_PIN, dir_level ? HIGH : LOW);
+    delayMicroseconds(2);  // Direction settle time
+    
+    int32_t steps = abs(count);
+    
+    // Limit steps per call
+    if (steps > 100) steps = 100;
+    
+    // Build RMT pulse data
+    static rmt_data_t rmt_buf[100];
+    static bool buf_init = false;
+    if (!buf_init) {
+        const uint32_t tick_us = 1000000UL / SPINDLE_RMT_RES_HZ;
+        uint32_t pulse_ticks = (SPINDLE_PULSE_US + tick_us - 1) / tick_us;
+        if (pulse_ticks < 1) pulse_ticks = 1;
+        rmt_data_t pulse = {};
+        pulse.level0 = 1;
+        pulse.duration0 = (uint16_t)pulse_ticks;
+        pulse.level1 = 0;
+        pulse.duration1 = (uint16_t)pulse_ticks;
+        for (int i = 0; i < 100; i++) {
+            rmt_buf[i] = pulse;
+        }
+        buf_init = true;
+    }
+    
+    // Output steps
+    rmtWrite(SPINDLE_STEP_PIN, rmt_buf, (size_t)steps, RMT_WAIT_FOR_EVER);
+    
+    // Update position
+    position += forward ? steps : -steps;
+}
+
+// ============================================================================
 // Emergency stop
 // ============================================================================
 void SpindleStepper::stop() {

@@ -36,6 +36,9 @@ public:
     // Emergency stop - immediately stops output
     static void stop();
 
+    // Step immediately (for MPG jog mode) - outputs actual pulses
+    static void stepImmediate(int32_t count);
+
     // Queue a software toggle (e.g., UI long-press)
     static void queueSoftToggle(int8_t dir);
 

@@ -565,8 +565,10 @@ lv_obj_t *UIManager::makeAxisRow(lv_obj_t *parent, const char *name,
         lv_obj_set_style_text_color(lbl_unit, lv_palette_main(LV_PALETTE_BLUE), LV_PART_MAIN);
         lbl_z_unit = lbl_unit;
     } else if (strcmp(name, "C") == 0) {
-        lv_label_set_text(lbl_unit, EncoderProxy::isManualRpmMode() ? "rpm" : "deg");
-        lv_obj_set_style_text_color(lbl_unit, EncoderProxy::isManualRpmMode() ?
+        // Initial unit based on current mode
+        bool showRpm = EncoderProxy::shouldShowRpm();
+        lv_label_set_text(lbl_unit, showRpm ? "rpm" : "deg");
+        lv_obj_set_style_text_color(lbl_unit, showRpm ?
             lv_palette_main(LV_PALETTE_RED) : lv_palette_main(LV_PALETTE_GREEN), LV_PART_MAIN);
         lbl_c_unit = lbl_unit;
     }
@@ -647,14 +649,18 @@ void UIManager::update() {
 	bool isJogZ = (mpgModeZ == MpgModeProto::JOG_Z);
 	lv_obj_set_style_text_color(lbl_z, isJogZ ? lv_palette_main(LV_PALETTE_RED) : lv_color_white(), LV_PART_MAIN);
 
-	// C axis display: RPM when moving, degrees when stopped, grey target RPM when in RPM mode but stopped
-	bool isJogC = (SpiMaster::getMpgMode() == MpgModeProto::JOG_C);
-	bool spindleMoving = (abs(EncoderProxy::getRpmSigned()) > 10);
+	// C axis display: explicit modes
+	// RPM_CONTROL mode: show RPM (target when stopped, actual when running)
+	// JOG_C mode: show degrees (red text)
+	// JOG_Z mode: show degrees (normal)
+	MpgModeProto mpgModeC = SpiMaster::getMpgMode();
+	bool isJogC = (mpgModeC == MpgModeProto::JOG_C);
+	bool spindleRunning = EncoderProxy::isSpindleRunning();
 
-	if (EncoderProxy::shouldShowRpm() && !isJogC)
+	if (EncoderProxy::shouldShowRpm())
 	{
-		// Normal RPM display (not in jog mode)
-		if (spindleMoving)
+		// RPM_CONTROL mode - show RPM
+		if (spindleRunning)
 		{
 			// Show actual RPM in white when spinning
 			snprintf(buf, sizeof(buf), "%ld", (long)EncoderProxy::getRpmSigned());
@@ -663,7 +669,7 @@ void UIManager::update() {
 		}
 		else
 		{
-			// Show target RPM in blue-grey when stopped (stepper spindle mode)
+			// Show target RPM in blue-grey when stopped
 			int16_t targetRpm = EncoderProxy::getTargetRpm();
 			if (targetRpm > 0)
 			{
@@ -684,11 +690,11 @@ void UIManager::update() {
 	}
 	else
 	{
-		// Degrees display (normal or jog mode - jog forces degrees)
+		// JOG mode - show degrees
 		int32_t c_phase = CoordinateSystem::getDisplayC(EncoderProxy::getRawTicks(), tool);
 		CoordinateSystem::formatDeg(buf, sizeof(buf), CoordinateSystem::ticksToDegX100(c_phase));
 		lv_label_set_text(lbl_c, buf);
-		// Value color: red in jog mode, white otherwise
+		// Value color: red in JOG_C mode, white otherwise
 		lv_obj_set_style_text_color(lbl_c, isJogC ? lv_palette_main(LV_PALETTE_RED) : lv_color_white(), LV_PART_MAIN);
 		if (lbl_c_unit) {
             lv_label_set_text(lbl_c_unit, "deg");
@@ -877,10 +883,12 @@ void UIManager::onToggleZPolarity(lv_event_t *e) {
 void UIManager::onToggleCMode(lv_event_t *e) {
 	if (lv_event_get_code(e) != LV_EVENT_SHORT_CLICKED)
 		return;
-	if (EncoderProxy::canToggleManualMode()) {
-        EncoderProxy::toggleManualRpmMode();
-        update();
-    }
+	// Toggle between RPM_CONTROL and JOG_C modes
+	MpgModeProto current = SpiMaster::getMpgMode();
+	MpgModeProto newMode = (current == MpgModeProto::JOG_C) ? MpgModeProto::RPM_CONTROL : MpgModeProto::JOG_C;
+	SpiMaster::setMpgMode(newMode);
+	Serial.printf("[UI] MPG mode -> %s (via C unit tap)\n", newMode == MpgModeProto::JOG_C ? "JOG_C" : "RPM");
+	update();
 }
 
 void UIManager::onEditEndstopMin(lv_event_t *e) {
@@ -929,18 +937,17 @@ void UIManager::onLongPressC(lv_event_t *e)
 	MpgModeProto newMode = (currentMode == MpgModeProto::JOG_C) ? MpgModeProto::RPM_CONTROL : MpgModeProto::JOG_C;
 	SpiMaster::setMpgMode(newMode);
 
-	// When entering jog mode, force degrees display (exit manual RPM mode if active)
-	if (newMode == MpgModeProto::JOG_C && EncoderProxy::isManualRpmMode())
-	{
-		EncoderProxy::toggleManualRpmMode(); // Turn off manual RPM mode
-	}
-
 	Serial.printf("[UI] MPG mode -> %s\n", newMode == MpgModeProto::JOG_C ? "JOG_C" : "RPM");
 }
 
 void UIManager::onLongPressCHeading(lv_event_t *e)
 {
 	(void)e;
+	// Only allow spindle toggle when not in JOG_C mode
+	if (SpiMaster::getMpgMode() == MpgModeProto::JOG_C) {
+		Serial.println("[UI] Spindle toggle blocked - in JOG_C mode");
+		return;
+	}
 	SpiMaster::requestSpindleToggleFwd();
 	Serial.println("[UI] Spindle toggle (FWD)");
 }

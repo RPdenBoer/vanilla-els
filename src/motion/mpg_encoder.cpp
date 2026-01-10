@@ -52,11 +52,10 @@ void IRAM_ATTR MpgEncoder::isrB() {
 // Initialization
 // ============================================================================
 bool MpgEncoder::init() {
-    // Configure pins as inputs
-    // Note: GPIO 34, 35 are input-only and don't have internal pullups.
-    // External pullups required.
-    pinMode(MPG_PINA, INPUT);
-    pinMode(MPG_PINB, INPUT);
+    // Configure pins as inputs with internal pullups
+    // MPG encoders typically have open-collector outputs
+    pinMode(MPG_PINA, INPUT_PULLUP);
+    pinMode(MPG_PINB, INPUT_PULLUP);
     
     // Read initial state
     uint8_t a = digitalRead(MPG_PINA) ? 1 : 0;

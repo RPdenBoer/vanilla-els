@@ -2,22 +2,15 @@
 #include "config_motion.h"
 #include "encoder_motion.h"
 #include "stepper.h"
+#include "spindle_stepper.h"
 #include <Arduino.h>
 
-#if SPINDLE_MODE == SPINDLE_MODE_STEPPER
-#include "spindle_stepper.h"
-#endif
-
 // ============================================================================
-// Spindle position abstraction - works for both encoder and stepper modes
+// Spindle position abstraction
 // ============================================================================
 static inline int32_t getSpindlePosition()
 {
-#if SPINDLE_MODE == SPINDLE_MODE_ENCODER
-	return EncoderMotion::getSpindleCount();
-#else
 	return SpindleStepper::getPosition();
-#endif
 }
 
 // Static member initialization

@@ -1,6 +1,6 @@
 // ============================================================================
 // Motion Controller Main (ESP32)
-// Handles: Encoders (X, Z, C/Spindle), Stepper output, ELS sync
+// Handles: Encoders (X, Z), Spindle stepper, ELS sync
 // ============================================================================
 
 #include <Arduino.h>
@@ -11,11 +11,8 @@
 #include "stepper.h"
 #include "els_core.h"
 #include "ota_motion.h"
-
-#if SPINDLE_MODE == SPINDLE_MODE_STEPPER
 #include "spindle_stepper.h"
 #include "mpg_encoder.h"
-#endif
 
 // ============================================================================
 // Motion task runs on Core 1 for deterministic timing
@@ -28,14 +25,13 @@ static void motionTask(void *param) {
     TickType_t last_wake = xTaskGetTickCount();
     
     while (true) {
-		// Update encoders (X, Z always; spindle only in encoder mode)
+		// Update linear encoders (X, Z)
 		EncoderMotion::update();
 
-#if SPINDLE_MODE == SPINDLE_MODE_STEPPER
 		// Update MPG encoder
 		MpgEncoder::update();
 
-		// Handle MPG jog modes
+		// Handle MPG jog modes - jog and spindle run are mutually exclusive
 		MpgMode mpg_mode = MpgEncoder::getMode();
 		if (mpg_mode == MpgMode::JOG_Z)
 		{
@@ -49,18 +45,20 @@ static void motionTask(void *param) {
 		}
 		else if (mpg_mode == MpgMode::JOG_C)
 		{
-			// Route MPG delta to spindle position
+			// Route MPG delta to spindle stepper (spindle run disabled in jog mode)
 			// Scale: 1 MPG count = 2 spindle steps (1600 steps/rev, so 800 counts = 1 rev)
 			int32_t delta = MpgEncoder::getDelta();
 			if (delta != 0)
 			{
-				SpindleStepper::position += delta * 2;
+				SpindleStepper::stepImmediate(delta * 2);
 			}
 		}
 
-		// Update spindle stepper (read switch, generate steps)
-		SpindleStepper::update();
-#endif
+		// Update spindle stepper (read switch, generate steps) - only when not in JOG_C mode
+		if (mpg_mode != MpgMode::JOG_C)
+		{
+			SpindleStepper::update();
+		}
 
 		// Run ELS core logic (calculates and outputs steps)
         ElsCore::update();
@@ -78,20 +76,13 @@ void setup() {
     delay(100);
     Serial.printf("\n[Motion] Boot: %s %s\n", __DATE__, __TIME__);
 
-#if SPINDLE_MODE == SPINDLE_MODE_ENCODER
-	Serial.println("[Motion] Spindle mode: ENCODER (external motor + quadrature feedback)");
-#else
-	Serial.println("[Motion] Spindle mode: STEPPER (ESP32-driven, MPG speed control)");
-#endif
-
-	// Initialize encoders (X, Z always; spindle encoder only in encoder mode)
+	// Initialize linear encoders (X, Z)
 	if (!EncoderMotion::init()) {
         Serial.println("[Motion] Encoder init FAILED");
     } else {
         Serial.println("[Motion] Encoders OK");
     }
 
-#if SPINDLE_MODE == SPINDLE_MODE_STEPPER
 	// Initialize MPG encoder (for speed control and jogging)
 	if (!MpgEncoder::init())
 	{
@@ -111,7 +102,6 @@ void setup() {
 	{
 		Serial.println("[Motion] Spindle stepper OK");
 	}
-#endif
 
 	// Initialize stepper output (for Z axis / ELS)
 	if (!Stepper::init()) {
@@ -172,24 +162,17 @@ void loop() {
     status.z_count = EncoderMotion::getZCount();
 	status.z_steps = Stepper::getPosition();
 
-	// Spindle data comes from different sources depending on mode
-#if SPINDLE_MODE == SPINDLE_MODE_ENCODER
-	status.c_count = EncoderMotion::getSpindleCount();
-	status.rpm_signed = EncoderMotion::getRpmSigned();
-	status.target_rpm = 0;	   // N/A in encoder mode
-	status.flags.mpg_mode = 0; // N/A in encoder mode
-#else
+	// Spindle data from stepper
 	status.c_count = SpindleStepper::getPosition();
 	status.rpm_signed = SpindleStepper::getRpmSigned();
 	status.target_rpm = MpgEncoder::getRpmSetting();
 	status.flags.mpg_mode = static_cast<uint8_t>(MpgEncoder::getMode());
-#endif
 
 	// Status flags
     status.flags.els_enabled = ElsCore::isEnabled();
     status.flags.els_fault = ElsCore::hasFault();
     status.flags.endstop_hit = ElsCore::endstopTriggered();
-    status.flags.spindle_moving = (abs(status.rpm_signed) > 10);
+    status.flags.spindle_moving = SpindleStepper::isRunning();
     status.flags.comms_ok = SpiSlave::isConnected();
 	status.flags.sync_waiting = ElsCore::isSyncWaiting();
 	status.ota_active = OtaMotion::isActive() ? 1 : 0;
@@ -220,14 +203,16 @@ void loop() {
 			ESP.restart();
 		}
 
-#if SPINDLE_MODE == SPINDLE_MODE_STEPPER
+		// Handle spindle toggle command from UI
 		if (cmd.sequence != prev_cmd_sequence) {
 			prev_cmd_sequence = cmd.sequence;
 			if (cmd.cmd == MotionCommand::SPINDLE_TOGGLE_FWD) {
-				SpindleStepper::queueSoftToggle(1);
+				// Only allow spindle toggle when not in JOG_C mode
+				if (MpgEncoder::getMode() != MpgMode::JOG_C) {
+					SpindleStepper::queueSoftToggle(1);
+				}
 			}
 		}
-#endif
         
         bool els_en = (cmd.flags & 0x01);
         bool endstop_min_en = (cmd.endstop_min_enabled != 0);
@@ -290,14 +275,19 @@ void loop() {
             endstop_max_en
         );
 
-		// Handle MPG mode changes from UI (stepper mode only)
-#if SPINDLE_MODE == SPINDLE_MODE_STEPPER
+		// Handle MPG mode changes from UI
 		if (!OtaMotion::isActive())
 		{
 			MpgModeProto requestedMode = static_cast<MpgModeProto>(cmd.mpg_mode);
-			MpgEncoder::setMode(static_cast<MpgMode>(requestedMode));
+			MpgMode newMode = static_cast<MpgMode>(requestedMode);
+			
+			// When switching to JOG_C, stop the spindle
+			if (newMode == MpgMode::JOG_C && MpgEncoder::getMode() != MpgMode::JOG_C) {
+				SpindleStepper::stop();
+			}
+			
+			MpgEncoder::setMode(newMode);
 		}
-#endif
 	} else {
         // No communication - disable ELS for safety
         ElsCore::setEnabled(false);
