@@ -99,8 +99,8 @@ static constexpr int32_t SYNC_IN_TOL_UM = 100;
 static constexpr int32_t SYNC_OUT_TOL_UM = 200;
 
 // Clamp speed trim multiplier range (percent of nominal)
-static constexpr int32_t SYNC_SPEED_MIN_PCT = 50;   // 0.5x
-static constexpr int32_t SYNC_SPEED_MAX_PCT = 150;  // 1.5x
+static constexpr int32_t SYNC_SPEED_MIN_PCT = 25;   // 0.25x
+static constexpr int32_t SYNC_SPEED_MAX_PCT = 175;  // 1.75x
 
 // Proportional gain K = SYNC_K_NUM / SYNC_K_DEN applied to (z_error / pitch)
 static constexpr int32_t SYNC_K_NUM = 1;

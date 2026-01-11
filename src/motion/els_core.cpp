@@ -61,7 +61,8 @@ static inline int64_t abs_i64(int64_t v) { return (v < 0) ? -v : v; }
 static inline int32_t mod_pos_i32(int32_t value, int32_t mod)
 {
 	int32_t r = value % mod;
-	if (r < 0) r += mod;
+	if (r < 0)
+		r += mod;
 	return r;
 }
 
@@ -69,22 +70,38 @@ static inline int32_t mod_pos_i32(int32_t value, int32_t mod)
 static inline int32_t wrap_diff_i32(int32_t diff, int32_t mod)
 {
 	const int32_t half = mod / 2;
-	if (diff > half) diff -= mod;
-	else if (diff < -half) diff += mod;
+	if (diff > half)
+		diff -= mod;
+	else if (diff < -half)
+		diff += mod;
 	return diff;
 }
 
 // Rounded integer division: returns nearest integer to a/b (ties round away from 0).
 static inline int64_t round_div_i64(int64_t a, int64_t b)
 {
-	if (b == 0) return 0;
+	if (b == 0)
+		return 0;
 	int64_t q = a / b;
 	int64_t r = a % b;
-	if (abs_i64(r) * 2 >= abs_i64(b)) {
+	if (abs_i64(r) * 2 >= abs_i64(b))
+	{
 		q += ((a >= 0) == (b >= 0)) ? 1 : -1;
 	}
 	return q;
 }
+
+// Sync line (pitch) tracking.
+// We align an absolute spindle tick reference (sync_c0_abs_ticks) to the UI-provided
+// within-rev phase, then compute an *unwrapped* expected-Z from the absolute spindle
+// position. This avoids the ±pitch/2 sawtooth that happens if you wrap phase to
+// [-180°, +180°] each cycle.
+//
+// g_sync_k is an optional integer pitch-line offset (in whole pitches) that we keep
+// latched during normal operation, but may adjust on egregious errors (e.g. halfnut
+// disengage/re-engage) to snap to the nearest valid thread line.
+static int64_t g_sync_k = 0;
+static bool g_sync_ref_valid = false;
 
 uint16_t ElsCore::getSyncSpeedScalePermille()
 {
@@ -116,6 +133,8 @@ void ElsCore::init() {
 	sync_last_adjust_ms = millis();
 	sync_abs_error_um = 0;
 	last_z_um = EncoderMotion::getZCount() * Z_UM_PER_COUNT;
+	g_sync_k = 0;
+	g_sync_ref_valid = false;
 	jog_active = false;
 	jog_dir = 0;
 	jog_prev_active = false;
@@ -140,6 +159,7 @@ void ElsCore::setEnabled(bool on) {
 		sync_speed_scale_fp = (int32_t)FP_SCALE;
 		sync_abs_error_um = 0;
 		sync_c0_abs_ticks = 0;
+		g_sync_ref_valid = false;
 	} else if (sync_enabled && !was_enabled) {
 		// Continuous sync: keep moving; reset controller state on enable
 		sync_waiting = false;
@@ -148,6 +168,7 @@ void ElsCore::setEnabled(bool on) {
 		sync_last_adjust_ms = millis();
 		sync_abs_error_um = 0;
 		sync_c0_abs_ticks = 0;
+		g_sync_ref_valid = false;
 	}
 }
 
@@ -159,6 +180,7 @@ void ElsCore::setPitchUm(int32_t pitch) {
 		sync_in = false;
 		sync_speed_scale_fp = (int32_t)FP_SCALE;
 		sync_last_adjust_ms = millis();
+		g_sync_ref_valid = false;
 	}
 }
 
@@ -171,6 +193,7 @@ void ElsCore::setDirectionMul(int8_t mul) {
 		sync_in = false;
 		sync_speed_scale_fp = (int32_t)FP_SCALE;
 		sync_last_adjust_ms = millis();
+		g_sync_ref_valid = false;
 	}
 }
 
@@ -207,6 +230,7 @@ void ElsCore::setSync(bool enabled, int32_t z_um, int32_t c_ticks) {
 		sync_last_adjust_ms = millis();
 		sync_abs_error_um = 0;
 		sync_c0_abs_ticks = 0;
+		g_sync_ref_valid = false;
 	}
 }
 
@@ -332,17 +356,41 @@ void ElsCore::update() {
 		const int32_t sync_scale_max_fp = (int32_t)((FP_SCALE * (int64_t)SYNC_SPEED_MAX_PCT) / 100);
 
 		// Expected Z:
-		// Use only within-rev C phase and choose the *nearest* valid sync line.
-		// This matches threading reality: there are infinite correct re-engagement points
-		// spaced by 1 revolution (1 pitch) along Z.
+		// Align an absolute spindle tick reference to the UI-provided phase, then compute
+		// unwrapped expected Z from absolute spindle position.
 		const int64_t pitch_dir = (int64_t)pitch_um * (int64_t)direction_mul;
+		const int32_t pitch_abs = (pitch_um < 0) ? -pitch_um : pitch_um;
 		const int32_t c_now = mod_pos_i32(spindle_count, C_COUNTS_PER_REV);
 		const int32_t c0 = mod_pos_i32(sync_phase_ticks, C_COUNTS_PER_REV);
-		const int32_t d_ticks = wrap_diff_i32(c_now - c0, C_COUNTS_PER_REV);
-		const int64_t offset_um = ((int64_t)d_ticks * pitch_dir) / (int64_t)C_COUNTS_PER_REV;
-		const int64_t k = round_div_i64((int64_t)sync_z_um - (int64_t)z_um - offset_um, pitch_dir);
-		const int32_t expected_z = (int32_t)((int64_t)sync_z_um - k * pitch_dir - offset_um);
-		const int32_t z_error = z_um - expected_z;
+
+		if (!g_sync_ref_valid) {
+			// Choose the absolute C0 tick that is nearest to current spindle_count.
+			const int32_t phase_diff = wrap_diff_i32(c_now - c0, C_COUNTS_PER_REV);
+			sync_c0_abs_ticks = (int64_t)spindle_count - (int64_t)phase_diff;
+			g_sync_k = 0;
+			g_sync_ref_valid = true;
+		}
+
+		const int64_t spindle_rel_ticks = (int64_t)spindle_count - sync_c0_abs_ticks;
+		int64_t expected_z_64 = (int64_t)sync_z_um + (spindle_rel_ticks * pitch_dir) / (int64_t)C_COUNTS_PER_REV
+			+ g_sync_k * pitch_dir;
+		int32_t z_error = (int32_t)((int64_t)z_um - expected_z_64);
+
+		// If we are wildly out (e.g. halfnut opened/reclosed), snap the pitch-line
+		// offset to the nearest valid thread line. Keep latched otherwise to avoid
+		// reference jumping during normal motion.
+		if (pitch_abs > 0 && pitch_dir != 0) {
+			const int32_t snap_thresh = pitch_abs * 2; // 2 pitches
+			if (abs_i32(z_error) > snap_thresh) {
+				const int64_t dk = round_div_i64((int64_t)z_error, pitch_dir);
+				g_sync_k += dk;
+				expected_z_64 = (int64_t)sync_z_um + (spindle_rel_ticks * pitch_dir) / (int64_t)C_COUNTS_PER_REV
+					+ g_sync_k * pitch_dir;
+				z_error = (int32_t)((int64_t)z_um - expected_z_64);
+			}
+		}
+
+		const int32_t expected_z = (int32_t)expected_z_64;
 		const int32_t abs_z_error = abs_i32(z_error);
 		sync_abs_error_um = (abs_z_error > 65535) ? 65535 : (uint16_t)abs_z_error;
 
@@ -350,13 +398,15 @@ void ElsCore::update() {
 		static uint32_t last_sync_dbg_ms = 0;
 		if ((uint32_t)(millis() - last_sync_dbg_ms) >= 1000) {
 			last_sync_dbg_ms = millis();
-			Serial.printf("[SYNC] err_um=%ld scale=%u/1000 Z=%ld expZ=%ld C=%ld c0=%ld\n",
-				(long)z_error,
-				(unsigned)ElsCore::getSyncSpeedScalePermille(),
-				(long)z_um,
-				(long)expected_z,
-				(long)c_now,
-				(long)c0);
+			Serial.printf("[SYNC] err_um=%ld scale=%u/1000 Z=%ld expZ=%ld C=%ld c0=%ld rel=%lld k=%lld\n",
+						  (long)z_error,
+						  (unsigned)ElsCore::getSyncSpeedScalePermille(),
+						  (long)z_um,
+						  (long)expected_z,
+						  (long)c_now,
+						  (long)c0,
+						  (long long)spindle_rel_ticks,
+						  (long long)g_sync_k);
 		}
 #endif
 
@@ -379,8 +429,8 @@ void ElsCore::update() {
 				// Increasing the scale increases the step output magnitude in the
 				// current movement direction.
 				const int32_t pitch_abs = (pitch_um < 0) ? -pitch_um : pitch_um;
-				// Sign of nominal Z motion (based on spindle direction and pitch mapping).
-				const int32_t move_sign = (((int64_t)spindle_delta * (int64_t)pitch_dir) < 0) ? -1 : 1;
+				// Sign of nominal step output (includes direction_mul).
+				const int32_t move_sign = (step_delta_fp >= 0) ? 1 : -1;
 				// error_frac_fp ~= (z_error / pitch) in fixed-point
 				const int64_t error_frac_fp = ((int64_t)z_error * (int64_t)FP_SCALE) / (int64_t)pitch_abs;
 				// Positive z_error means the leadscrew is "ahead" of expected.
