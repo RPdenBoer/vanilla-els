@@ -236,10 +236,10 @@ void SpindleStepper::updateSpeed() {
                 step_period_us = SPINDLE_MIN_STEP_PERIOD_US;
             if (step_period_us > SPINDLE_MAX_STEP_PERIOD_US)
                 step_period_us = SPINDLE_MAX_STEP_PERIOD_US;
-            if (step_period_us != unclamped_period_us) {
-				steps_per_sec = (int32_t)(1000000UL / step_period_us);
-            }
-            running = true;
+			// Always derive steps_per_sec from the (possibly clamped) period so that
+			// telemetry and position accumulation match the actual waveform.
+			steps_per_sec = (step_period_us > 0) ? (int32_t)(1000000UL / step_period_us) : 0;
+			running = (steps_per_sec > 0);
         }
     }
 
