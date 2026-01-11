@@ -44,21 +44,21 @@ static void motionTask(void *param) {
 		if (mpg_mode == MpgMode::JOG_Z)
 		{
 			// Route MPG delta to Z stepper
-			// Scale: 1 MPG count = 1 Z step (direct 1:1 for fine control)
+			// Scale: MPG_JOG_Z_STEPS_PER_COUNT steps per MPG count
 			int32_t delta = MpgEncoder::getDelta();
 			if (delta != 0 && !ElsCore::isEnabled())
 			{
-				Stepper::step(delta);
+				Stepper::step(delta * MPG_JOG_Z_STEPS_PER_COUNT);
 			}
 		}
 		else if (mpg_mode == MpgMode::JOG_C)
 		{
 			// Route MPG delta to spindle stepper (spindle run disabled in jog mode)
-			// Scale: 1 MPG count = 2 spindle steps (1600 steps/rev, so 800 counts = 1 rev)
+			// Scale: MPG_JOG_C_STEPS_PER_COUNT steps per MPG count
 			int32_t delta = MpgEncoder::getDelta();
 			if (delta != 0)
 			{
-				SpindleStepper::stepImmediate(delta * 2);
+				SpindleStepper::stepImmediate(delta * MPG_JOG_C_STEPS_PER_COUNT);
 			}
 		}
 
@@ -180,7 +180,9 @@ void loop() {
     status.flags.els_enabled = ElsCore::isEnabled();
     status.flags.els_fault = ElsCore::hasFault();
     status.flags.endstop_hit = ElsCore::endstopTriggered();
-    status.flags.spindle_moving = SpindleStepper::isRunning();
+	// Report "spindle toggled on" (commanded direction != 0), not actual motion.
+	// This lets UI show an "active" (white) RPM display even at 0 RPM.
+	status.flags.spindle_moving = (SpindleStepper::getDirection() != 0);
     status.flags.comms_ok = SpiSlave::isConnected();
 	status.flags.sync_waiting = ElsCore::isSyncWaiting();
 	status.ota_active = OtaMotion::isActive() ? 1 : 0;

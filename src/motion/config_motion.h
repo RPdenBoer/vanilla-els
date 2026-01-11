@@ -35,6 +35,12 @@ static constexpr int MPG_PINB = 26;					  // MPG encoder B
 static constexpr int32_t MPG_COUNTS_TO_MAX_RPM = 200 * 4 * 3; // 0-3000 RPM range (200 PPR * 4 quadrature)
 static constexpr bool MPG_INVERT_DIR = false;
 
+// MPG jog scaling
+// - Z jog: number of Z stepper steps per MPG count
+// - C jog: number of spindle stepper steps per MPG count
+static constexpr int32_t MPG_JOG_Z_STEPS_PER_COUNT = 2;
+static constexpr int32_t MPG_JOG_C_STEPS_PER_COUNT = 1;
+
 // Direction switch inputs (active LOW, external pullups recommended)
 // Both off = stopped, FWD on = forward, REV on = reverse
 static constexpr int SPINDLE_FWD_PIN = 36; // Forward switch (input only pin)
@@ -55,7 +61,7 @@ static constexpr int Z_PINB = 14;
 
 // Set to true if direction is reversed after wiring
 static constexpr bool X_INVERT_DIR = false;
-static constexpr bool Z_INVERT_DIR = false;
+static constexpr bool Z_INVERT_DIR = true;
 
 // ============================================================================
 // Electronic Leadscrew (Z axis stepper driver)
@@ -75,7 +81,7 @@ static constexpr int32_t ELS_PULSE_US = 2;
 // Cap steps per update cycle to avoid extreme bursts if we fall behind
 static constexpr int32_t ELS_MAX_STEPS_PER_CYCLE = 800;
 // Constant jog feed (Z axis), used for long-press jog buttons
-static constexpr int32_t ELS_JOG_MM_PER_MIN = 100;
+static constexpr int32_t ELS_JOG_MM_PER_MIN = 1000;
 
 // Use ESP-IDF RMT for precise step pulse timing (recommended)
 static constexpr bool     ELS_USE_RMT = true;

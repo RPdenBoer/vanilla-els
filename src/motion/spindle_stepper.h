@@ -20,11 +20,11 @@ public:
     // Get current spindle position in steps (used by ELS as source of truth)
     static int32_t getPosition() { return position; }
     
-    // Get current actual RPM (may differ from target during accel)
+    // Get current actual RPM in 0.1 RPM units (may differ from target during accel)
     static int16_t getRpmSigned() { return rpm_signed; }
     static int16_t getRpmAbs() { return rpm_abs; }
     
-    // Get target RPM from potentiometer
+    // Get target RPM in 0.1 RPM units (RPM×10)
     static int16_t getTargetRpm() { return target_rpm; }
     
     // Get direction: +1 forward, -1 reverse, 0 stopped
@@ -49,10 +49,11 @@ public:
     static volatile int32_t position;
     
 private:
-    static int16_t rpm_signed;          // Current RPM with sign
-    static int16_t rpm_abs;             // Current RPM absolute
-    static int16_t target_rpm;          // Target RPM from pot
-    static int16_t current_rpm;         // Actual RPM (after accel limiting)
+    // Signed spindle speed in 0.1 RPM units (RPM×10)
+    static int16_t rpm_signed;          // Current RPM x10 with sign
+    static int16_t rpm_abs;             // Current RPM x10 absolute
+    static int16_t target_rpm;          // Target RPM x10 from MPG
+    static int16_t current_rpm;         // Actual RPM x10 (after accel limiting)
     static int8_t direction;            // +1, -1, or 0
     static bool running;
     

@@ -25,6 +25,7 @@
 // SPI polling and proxy updates
 // ============================================================================
 static void updateFromMotionBoard() {
+    static bool prev_endstop_hit = false;
     SpiMaster::poll();
     const StatusPacket& status = SpiMaster::getStatus();
     
@@ -46,9 +47,13 @@ static void updateFromMotionBoard() {
 	OtaProxy::setMotionOtaActive(status.ota_active != 0);
 
 	// Check for endstop hit flag from motion board
-    if (status.flags.endstop_hit) {
+    // Motion endstop_hit is sticky until ELS is re-enabled; treat it as an event
+    // to avoid forcing ELS OFF on the first enable attempt after a previous hit.
+    if (status.flags.endstop_hit && !prev_endstop_hit)
+    {
         LeadscrewProxy::setBoundsExceeded(true);
     }
+    prev_endstop_hit = status.flags.endstop_hit;
 }
 
 static void sendCommandsToMotionBoard() {

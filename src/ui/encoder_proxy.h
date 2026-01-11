@@ -12,7 +12,7 @@ public:
     static void init();
     
     // Update from motion board status packet
-	static void updateFromMotion(int32_t c_ticks, int16_t rpm, int16_t target_rpm, uint8_t mpg_mode, bool spindle_moving);
+	static void updateFromMotion(int32_t c_ticks, int16_t rpm_x10, int16_t target_rpm, uint8_t mpg_mode, bool spindle_moving);
 
 	// Get cached values
     static int32_t getRawTicks() { return c_raw_ticks; }

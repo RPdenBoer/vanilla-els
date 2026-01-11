@@ -11,7 +11,7 @@
 static constexpr size_t PROTOCOL_PACKET_SIZE = 32;
 
 // Protocol version for compatibility checking
-static constexpr uint8_t PROTOCOL_VERSION = 11;
+static constexpr uint8_t PROTOCOL_VERSION = 12;
 
 // ============================================================================
 // MPG Mode (Manual Pulse Generator routing)
@@ -60,7 +60,7 @@ struct MotionStatusFlags {
     uint8_t els_enabled     : 1;  // ELS is currently running
     uint8_t els_fault       : 1;  // ELS stopped due to fault
     uint8_t endstop_hit     : 1;  // Soft endstop was triggered
-    uint8_t spindle_moving  : 1;  // Spindle is rotating (RPM > threshold)
+	uint8_t spindle_moving  : 1;  // Spindle is enabled/toggled on (direction != 0)
     uint8_t comms_ok        : 1;  // Communication healthy
 	uint8_t mpg_mode : 2;		  // Current MPG mode (MpgModeProto)
 	uint8_t sync_waiting : 1;	  // ELS sync is waiting for phase match
@@ -109,8 +109,9 @@ struct __attribute__((packed)) StatusPacket {
 	int32_t c_count;              // Spindle total count     [4]
 	int32_t z_steps;              // Stepper position        [4]
     
-    int16_t rpm_signed;           // Spindle RPM with sign   [2]
-	int16_t target_rpm;			  // Target RPM from MPG     [2]
+	// Signed spindle speed in 0.1 RPM units (e.g. 1234 => 123.4 RPM)
+	int16_t rpm_signed;           // Spindle RPM x10 with sign [2]
+	int16_t target_rpm;			  // Target RPM x10 from MPG [2]
 	uint8_t ota_active;			  // OTA mode active         [1]
 	uint8_t wifi_connected;		  // WiFi connected          [1]
 	uint16_t sync_speed_scale_permille; // ELS sync speed scale (1000 = 1.000x) [2]

@@ -71,6 +71,8 @@ private:
     static uint32_t btn_right_down_ms;
 	static bool endstop_min_hit;
 	static bool endstop_max_hit;
+	static uint32_t endstop_min_hit_ms;
+	static uint32_t endstop_max_hit_ms;
 	static bool jog_touch_left;
 	static bool jog_touch_right;
 	static bool jog_phys_left;

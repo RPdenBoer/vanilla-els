@@ -94,15 +94,18 @@ int32_t MpgEncoder::getDelta() {
 void MpgEncoder::update() {
     // In RPM control mode, map position to RPM
     if (mode == MpgMode::RPM_CONTROL) {
-        // Clamp position to valid range (0 to MPG_COUNTS_TO_MAX_RPM)
+        // Clamp position to valid range.
+        // We now treat 1 MPG count as 0.1 RPM, so full-scale to 3000.0 RPM
+        // requires position up to SPINDLE_MAX_RPM * 10.
+        static constexpr int32_t MPG_MAX_POS = (int32_t)SPINDLE_MAX_RPM * 10;
         noInterrupts();
         if (position < 0) position = 0;
-        if (position > MPG_COUNTS_TO_MAX_RPM) position = MPG_COUNTS_TO_MAX_RPM;
+        if (position > MPG_MAX_POS) position = MPG_MAX_POS;
         int32_t pos = position;
         interrupts();
         
-        // Linear mapping: 0-200 counts -> 0-3000 RPM
-        rpm_setting = (int16_t)((pos * SPINDLE_MAX_RPM) / MPG_COUNTS_TO_MAX_RPM);
+        // Mapping: 1 count = 0.1 RPM
+        rpm_setting = (int16_t)pos;
     }
     // In jog modes, position is unbounded and delta is consumed by stepper
 }

@@ -25,7 +25,7 @@ public:
     // Get accumulated counts since last read (resets accumulator)
     static int32_t getDelta();
     
-    // Get current RPM setting (0-3000 based on position)
+    // Get current RPM setting (0-3000 based on position, in 0.1 RPM units)
     static int16_t getRpmSetting() { return rpm_setting; }
     
     // Get total accumulated position (not reset)
@@ -42,7 +42,7 @@ private:
     static volatile int32_t position;     // Total accumulated position
     static volatile int32_t delta_accum;  // Accumulated delta since last getDelta()
     static volatile uint8_t last_state;
-    static int16_t rpm_setting;           // Current RPM derived from position
+    static int16_t rpm_setting;           // Current RPM x10 derived from position
     static MpgMode mode;
     
     static void IRAM_ATTR isrA();

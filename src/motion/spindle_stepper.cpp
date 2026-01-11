@@ -112,7 +112,8 @@ void SpindleStepper::readControls() {
         jog_active = true;
         jog_dir = (dir > 0) ? 1 : -1;
         direction = jog_dir;
-        current_rpm = (SPINDLE_JOG_RPM > SPINDLE_MAX_RPM) ? SPINDLE_MAX_RPM : (int16_t)SPINDLE_JOG_RPM;
+		int16_t jog_rpm = (SPINDLE_JOG_RPM > SPINDLE_MAX_RPM) ? (int16_t)SPINDLE_MAX_RPM : (int16_t)SPINDLE_JOG_RPM;
+		current_rpm = (int16_t)(jog_rpm * 10);
     };
 
     auto stop_jog = [&](int8_t dir) {
@@ -168,7 +169,7 @@ void SpindleStepper::readControls() {
     prev_fwd_pressed = fwd_pressed;
     prev_rev_pressed = rev_pressed;
     
-    // Get RPM from MPG encoder (only when in RPM control mode)
+    // Get RPM x10 from MPG encoder (only when in RPM control mode)
     if (MpgEncoder::getMode() == MpgMode::RPM_CONTROL) {
         target_rpm = MpgEncoder::getRpmSetting();
     }
@@ -190,16 +191,17 @@ void SpindleStepper::updateSpeed() {
     last_update_us = now_us;
 	last_dt_us = dt_us;
     
-    // Calculate max RPM change for this update interval
-    int32_t max_delta = (SPINDLE_ACCEL_RPM_PER_SEC * (int32_t)dt_us) / 1000000;
+    // Calculate max RPM×10 change for this update interval
+	int32_t max_delta = ((SPINDLE_ACCEL_RPM_PER_SEC * 10) * (int32_t)dt_us) / 1000000;
     if (max_delta < 1) max_delta = 1;
     
     // Apply acceleration limiting
     int16_t rpm_target = 0;
     if (jog_active) {
-        rpm_target = (SPINDLE_JOG_RPM > SPINDLE_MAX_RPM) ? SPINDLE_MAX_RPM : (int16_t)SPINDLE_JOG_RPM;
-        if (rpm_target < 0) rpm_target = 0;
-        current_rpm = rpm_target;
+		int16_t jog_rpm = (SPINDLE_JOG_RPM > SPINDLE_MAX_RPM) ? (int16_t)SPINDLE_MAX_RPM : (int16_t)SPINDLE_JOG_RPM;
+		rpm_target = (int16_t)(jog_rpm * 10);
+		if (rpm_target < 0) rpm_target = 0;
+		current_rpm = rpm_target;
     } else {
         rpm_target = (direction == 0) ? 0 : target_rpm;
         if (current_rpm < rpm_target) {
@@ -211,30 +213,31 @@ void SpindleStepper::updateSpeed() {
         }
     }
     
-    // Calculate step period from RPM
-    // steps_per_sec = (RPM / 60) * STEPS_PER_REV
-    // period_us = 1000000 / steps_per_sec
-    
-    if (current_rpm < SPINDLE_MIN_RPM) {
+    // Calculate step period from RPM×10
+    // period_us = 60e6 * 10 / (RPM×10 * STEPS_PER_REV)
+
+	const int16_t min_rpm_x10 = (int16_t)(SPINDLE_MIN_RPM * 10);
+    if (current_rpm < min_rpm_x10) {
         // Stopped or too slow
         step_period_us = 0;
         steps_per_sec = 0;
         running = false;
         step_accumulator_fp = 0;
     } else {
-        steps_per_sec = ((int32_t)current_rpm * SPINDLE_STEPS_PER_REV) / 60;
-        if (steps_per_sec <= 0) {
-            step_period_us = 0;
-            running = false;
-        } else {
-            uint32_t unclamped_period_us = 1000000UL / (uint32_t)steps_per_sec;
+		const int32_t denom = (int32_t)current_rpm * (int32_t)SPINDLE_STEPS_PER_REV;
+		if (denom <= 0) {
+			step_period_us = 0;
+			running = false;
+			steps_per_sec = 0;
+		} else {
+			uint32_t unclamped_period_us = (uint32_t)((600000000LL) / (int64_t)denom);
             step_period_us = unclamped_period_us;
             if (step_period_us < SPINDLE_MIN_STEP_PERIOD_US)
                 step_period_us = SPINDLE_MIN_STEP_PERIOD_US;
             if (step_period_us > SPINDLE_MAX_STEP_PERIOD_US)
                 step_period_us = SPINDLE_MAX_STEP_PERIOD_US;
             if (step_period_us != unclamped_period_us) {
-                steps_per_sec = (int32_t)(1000000UL / step_period_us);
+				steps_per_sec = (int32_t)(1000000UL / step_period_us);
             }
             running = true;
         }
@@ -242,9 +245,11 @@ void SpindleStepper::updateSpeed() {
 
     // Update public RPM based on actual step rate
     if (steps_per_sec > 0) {
-        int16_t actual_rpm = (int16_t)((steps_per_sec * 60) / SPINDLE_STEPS_PER_REV);
-        rpm_abs = actual_rpm;
-        rpm_signed = actual_rpm * direction;
+		// Compute RPM in 0.1 RPM units (RPM×10) to allow UI to show a real decimal.
+		// rpm_x10 = steps_per_sec * 60 * 10 / steps_per_rev
+		int16_t actual_rpm_x10 = (int16_t)((steps_per_sec * 600) / SPINDLE_STEPS_PER_REV);
+		rpm_abs = (actual_rpm_x10 < 0) ? (int16_t)-actual_rpm_x10 : actual_rpm_x10;
+		rpm_signed = (int16_t)(actual_rpm_x10 * direction);
     } else {
         rpm_abs = 0;
         rpm_signed = 0;

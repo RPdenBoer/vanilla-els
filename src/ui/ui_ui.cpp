@@ -72,6 +72,8 @@ uint32_t UIManager::btn_left_down_ms = 0;
 uint32_t UIManager::btn_right_down_ms = 0;
 bool UIManager::endstop_min_hit = false;
 bool UIManager::endstop_max_hit = false;
+uint32_t UIManager::endstop_min_hit_ms = 0;
+uint32_t UIManager::endstop_max_hit_ms = 0;
 bool UIManager::jog_touch_left = false;
 bool UIManager::jog_touch_right = false;
 bool UIManager::jog_phys_left = false;
@@ -82,6 +84,10 @@ uint32_t UIManager::jog_touch_left_down_ms = 0;
 uint32_t UIManager::jog_touch_right_down_ms = 0;
 
 static constexpr uint32_t JOG_PRESS_MS = 350;
+
+// Sync UX: avoid showing green immediately on enable before spindle moves.
+static bool g_sync_seen_motion_since_enable = false;
+static int32_t g_sync_enable_c_ticks = 0;
 
 void UIManager::updateJogAvailability() {
 	if (!btn_jog_l || !btn_jog_r)
@@ -331,6 +337,15 @@ void UIManager::createUI() {
 	lv_obj_set_style_bg_color(btn_sync_ptr, lv_palette_darken(LV_PALETTE_GREEN, 2), LV_PART_MAIN | LV_STATE_USER_2 | LV_STATE_CHECKED);
 	lv_obj_set_style_border_color(btn_sync_ptr, lv_palette_darken(LV_PALETTE_GREEN, 2), LV_PART_MAIN | LV_STATE_USER_2 | LV_STATE_CHECKED);
 	lv_obj_set_style_text_color(btn_sync_ptr, lv_color_white(), LV_PART_MAIN | LV_STATE_USER_2 | LV_STATE_CHECKED);
+	// Light-red state used when Sync is enabled but ELS is not.
+	lv_obj_set_style_bg_opa(btn_sync_ptr, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_USER_3);
+	lv_obj_set_style_bg_color(btn_sync_ptr, endstop_active_color(), LV_PART_MAIN | LV_STATE_USER_3);
+	lv_obj_set_style_border_color(btn_sync_ptr, endstop_active_color(), LV_PART_MAIN | LV_STATE_USER_3);
+	lv_obj_set_style_text_color(btn_sync_ptr, lv_color_white(), LV_PART_MAIN | LV_STATE_USER_3);
+	lv_obj_set_style_bg_opa(btn_sync_ptr, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_USER_3 | LV_STATE_CHECKED);
+	lv_obj_set_style_bg_color(btn_sync_ptr, endstop_active_color(), LV_PART_MAIN | LV_STATE_USER_3 | LV_STATE_CHECKED);
+	lv_obj_set_style_border_color(btn_sync_ptr, endstop_active_color(), LV_PART_MAIN | LV_STATE_USER_3 | LV_STATE_CHECKED);
+	lv_obj_set_style_text_color(btn_sync_ptr, lv_color_white(), LV_PART_MAIN | LV_STATE_USER_3 | LV_STATE_CHECKED);
 	apply_button_common_style(btn_sync_ptr);
 	lv_obj_t *lbl_sync = lv_label_create(btn_sync_ptr);
 	lv_label_set_text(lbl_sync, "|•|");
@@ -597,19 +612,40 @@ lv_obj_t *UIManager::makeAxisRow(lv_obj_t *parent, const char *name,
 void UIManager::update() {
     if (!lbl_x || !lbl_z || !lbl_c) return;
 
+	static constexpr uint32_t ENDSTOP_HIT_HOLD_MS = 1000;
+
     // Check bounds exceeded from motion board
     if (LeadscrewProxy::wasBoundsExceeded()) {
         LeadscrewProxy::clearBoundsExceeded();
 		const int32_t z_um = CoordinateSystem::z_raw_um;
 		if (EndstopProxy::isMinEnabled() && z_um <= EndstopProxy::getMinMachineUm()) {
 			endstop_min_hit = true;
+			endstop_min_hit_ms = millis();
 		}
 		if (EndstopProxy::isMaxEnabled() && z_um >= EndstopProxy::getMaxMachineUm()) {
 			endstop_max_hit = true;
+			endstop_max_hit_ms = millis();
 		}
         forceElsOff();
 		updateEndstopButtonStates();
     }
+
+	// Clear the green "hit" indication after a short hold.
+	// This keeps the UI informative without keeping a stale latched state.
+	bool endstop_state_changed = false;
+	const uint32_t now_ms = millis();
+	if (endstop_min_hit && (now_ms - endstop_min_hit_ms) > ENDSTOP_HIT_HOLD_MS)
+	{
+		endstop_min_hit = false;
+		endstop_state_changed = true;
+	}
+	if (endstop_max_hit && (now_ms - endstop_max_hit_ms) > ENDSTOP_HIT_HOLD_MS)
+	{
+		endstop_max_hit = false;
+		endstop_state_changed = true;
+	}
+	if (endstop_state_changed)
+		updateEndstopButtonStates();
 
     updateJogAvailability();
 
@@ -662,23 +698,23 @@ void UIManager::update() {
 		// RPM_CONTROL mode - show RPM
 		if (spindleRunning)
 		{
-			// Show actual RPM in white when spinning
-			snprintf(buf, sizeof(buf), "%ld", (long)EncoderProxy::getRpmSigned());
+			// Show actual RPM in white when enabled/toggled on
+			const int32_t rpm_x10 = EncoderProxy::getRpmSigned();
+			const int32_t abs_rpm_x10 = (rpm_x10 < 0) ? -rpm_x10 : rpm_x10;
+			const int32_t rpm_int = abs_rpm_x10 / 10;
+			const int32_t rpm_frac = abs_rpm_x10 % 10;
+			snprintf(buf, sizeof(buf), "%s%ld.%01ld", (rpm_x10 < 0) ? "-" : "", (long)rpm_int, (long)rpm_frac);
 			lv_label_set_text(lbl_c, buf);
 			lv_obj_set_style_text_color(lbl_c, lv_color_white(), LV_PART_MAIN);
 		}
 		else
 		{
 			// Show target RPM in blue-grey when stopped
-			int16_t targetRpm = EncoderProxy::getTargetRpm();
-			if (targetRpm > 0)
-			{
-				snprintf(buf, sizeof(buf), "%d", targetRpm);
-			}
-			else
-			{
-				snprintf(buf, sizeof(buf), "0");
-			}
+			int16_t targetRpm_x10 = EncoderProxy::getTargetRpm();
+			if (targetRpm_x10 < 0) targetRpm_x10 = 0;
+			const int32_t tgt_int = targetRpm_x10 / 10;
+			const int32_t tgt_frac = targetRpm_x10 % 10;
+			snprintf(buf, sizeof(buf), "%ld.%01ld", (long)tgt_int, (long)tgt_frac);
 			lv_label_set_text(lbl_c, buf);
 			lv_obj_set_style_text_color(lbl_c, lv_palette_darken(LV_PALETTE_BLUE_GREY, 4), LV_PART_MAIN);
 		}
@@ -730,6 +766,16 @@ void UIManager::onEditSync(lv_event_t *e)
 	if (lv_event_get_code(e) != LV_EVENT_SHORT_CLICKED)
 		return;
 	SyncProxy::toggleEnabled();
+	if (SyncProxy::isEnabled())
+	{
+		g_sync_seen_motion_since_enable = EncoderProxy::isSpindleRunning();
+		g_sync_enable_c_ticks = EncoderProxy::getRawTicks();
+	}
+	else
+	{
+		g_sync_seen_motion_since_enable = false;
+		g_sync_enable_c_ticks = 0;
+	}
 	updateSyncButtonStates();
 }
 
@@ -979,12 +1025,33 @@ void UIManager::updateSyncButtonStates()
 		lv_obj_clear_state(btn_sync_ptr, LV_STATE_CHECKED);
 		lv_obj_clear_state(btn_sync_ptr, LV_STATE_USER_1);
 		lv_obj_clear_state(btn_sync_ptr, LV_STATE_USER_2);
+		lv_obj_clear_state(btn_sync_ptr, LV_STATE_USER_3);
 		return;
 	}
 
 	// Sync enabled: show red/orange/green based on current speed correction.
 	// Color meaning is based on actual sync error magnitude (microns).
 	lv_obj_add_state(btn_sync_ptr, LV_STATE_CHECKED);
+	// Clear overlay states first
+	lv_obj_clear_state(btn_sync_ptr, LV_STATE_USER_1);
+	lv_obj_clear_state(btn_sync_ptr, LV_STATE_USER_2);
+	lv_obj_clear_state(btn_sync_ptr, LV_STATE_USER_3);
+
+	// If Sync is ON but ELS is OFF, show light red to avoid misleading green.
+	if (!LeadscrewProxy::isEnabled())
+	{
+		lv_obj_add_state(btn_sync_ptr, LV_STATE_USER_3);
+		return;
+	}
+
+	// Default to red until we've seen spindle motion since enabling sync.
+	if (!g_sync_seen_motion_since_enable)
+	{
+		if (EncoderProxy::isSpindleRunning() || (EncoderProxy::getRawTicks() != g_sync_enable_c_ticks))
+			g_sync_seen_motion_since_enable = true;
+		else
+			return;
+	}
 
 	const uint16_t abs_err_um = SyncProxy::getAbsErrorUm();
 	static constexpr uint16_t GREEN_ERR_UM = 100;
@@ -992,19 +1059,16 @@ void UIManager::updateSyncButtonStates()
 
 	if (abs_err_um <= GREEN_ERR_UM)
 	{
-		lv_obj_clear_state(btn_sync_ptr, LV_STATE_USER_1);
 		lv_obj_add_state(btn_sync_ptr, LV_STATE_USER_2);
 	}
 	else if (abs_err_um <= ORANGE_ERR_UM)
 	{
 		lv_obj_add_state(btn_sync_ptr, LV_STATE_USER_1);
-		lv_obj_clear_state(btn_sync_ptr, LV_STATE_USER_2);
 	}
 	else
 	{
 		// Red (base checked style)
-		lv_obj_clear_state(btn_sync_ptr, LV_STATE_USER_1);
-		lv_obj_clear_state(btn_sync_ptr, LV_STATE_USER_2);
+		// (no overlay state)
 	}
 }
 

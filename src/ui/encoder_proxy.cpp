@@ -20,14 +20,14 @@ void EncoderProxy::init() {
 	spindle_running = false;
 }
 
-void EncoderProxy::updateFromMotion(int32_t c_ticks, int16_t rpm, int16_t tgt_rpm, uint8_t mode, bool moving)
+void EncoderProxy::updateFromMotion(int32_t c_ticks, int16_t rpm_x10, int16_t tgt_rpm, uint8_t mode, bool moving)
 {
 	c_raw_ticks = c_ticks;
     c_total_count = c_ticks;  // Total count for ELS sync
     
     // Handle RPM direction
-    rpm_raw = (rpm < 0) ? -rpm : rpm;
-    rpm_signed = rpm;
+	rpm_raw = (rpm_x10 < 0) ? -rpm_x10 : rpm_x10;
+	rpm_signed = rpm_x10;
 
 	// Store values from motion board
 	target_rpm = tgt_rpm;

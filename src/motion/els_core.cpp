@@ -363,7 +363,8 @@ void ElsCore::update() {
 		const int32_t c_now = mod_pos_i32(spindle_count, C_COUNTS_PER_REV);
 		const int32_t c0 = mod_pos_i32(sync_phase_ticks, C_COUNTS_PER_REV);
 
-		if (!g_sync_ref_valid) {
+		if (!g_sync_ref_valid)
+		{
 			// Choose the absolute C0 tick that is nearest to current spindle_count.
 			const int32_t phase_diff = wrap_diff_i32(c_now - c0, C_COUNTS_PER_REV);
 			sync_c0_abs_ticks = (int64_t)spindle_count - (int64_t)phase_diff;
@@ -372,20 +373,20 @@ void ElsCore::update() {
 		}
 
 		const int64_t spindle_rel_ticks = (int64_t)spindle_count - sync_c0_abs_ticks;
-		int64_t expected_z_64 = (int64_t)sync_z_um + (spindle_rel_ticks * pitch_dir) / (int64_t)C_COUNTS_PER_REV
-			+ g_sync_k * pitch_dir;
+		int64_t expected_z_64 = (int64_t)sync_z_um + (spindle_rel_ticks * pitch_dir) / (int64_t)C_COUNTS_PER_REV + g_sync_k * pitch_dir;
 		int32_t z_error = (int32_t)((int64_t)z_um - expected_z_64);
 
 		// If we are wildly out (e.g. halfnut opened/reclosed), snap the pitch-line
 		// offset to the nearest valid thread line. Keep latched otherwise to avoid
 		// reference jumping during normal motion.
-		if (pitch_abs > 0 && pitch_dir != 0) {
+		if (pitch_abs > 0 && pitch_dir != 0)
+		{
 			const int32_t snap_thresh = pitch_abs * 2; // 2 pitches
-			if (abs_i32(z_error) > snap_thresh) {
+			if (abs_i32(z_error) > snap_thresh)
+			{
 				const int64_t dk = round_div_i64((int64_t)z_error, pitch_dir);
 				g_sync_k += dk;
-				expected_z_64 = (int64_t)sync_z_um + (spindle_rel_ticks * pitch_dir) / (int64_t)C_COUNTS_PER_REV
-					+ g_sync_k * pitch_dir;
+				expected_z_64 = (int64_t)sync_z_um + (spindle_rel_ticks * pitch_dir) / (int64_t)C_COUNTS_PER_REV + g_sync_k * pitch_dir;
 				z_error = (int32_t)((int64_t)z_um - expected_z_64);
 			}
 		}
