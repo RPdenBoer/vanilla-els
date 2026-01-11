@@ -30,6 +30,7 @@ int32_t ElsCore::sync_tolerance_out_um = 25;
 int32_t ElsCore::sync_tolerance_in_ticks = 8;  // ~1.8 degrees tolerance for sync acquisition
 int32_t ElsCore::sync_ref_z_um = 0;
 int32_t ElsCore::sync_ref_spindle = 0;
+int64_t ElsCore::sync_c0_abs_ticks = 0;
 int32_t ElsCore::sync_speed_scale_fp = 65536;
 uint32_t ElsCore::sync_last_adjust_ms = 0;
 uint16_t ElsCore::sync_abs_error_um = 0;
@@ -55,6 +56,35 @@ static constexpr int64_t JOG_STEPS_PER_US_FP =
 	(60LL * 1000000LL * (int64_t)ELS_LEADSCREW_PITCH_UM);
 
 static inline int32_t abs_i32(int32_t v) { return (v < 0) ? -v : v; }
+static inline int64_t abs_i64(int64_t v) { return (v < 0) ? -v : v; }
+
+static inline int32_t mod_pos_i32(int32_t value, int32_t mod)
+{
+	int32_t r = value % mod;
+	if (r < 0) r += mod;
+	return r;
+}
+
+// Wrap a phase difference into [-mod/2, +mod/2].
+static inline int32_t wrap_diff_i32(int32_t diff, int32_t mod)
+{
+	const int32_t half = mod / 2;
+	if (diff > half) diff -= mod;
+	else if (diff < -half) diff += mod;
+	return diff;
+}
+
+// Rounded integer division: returns nearest integer to a/b (ties round away from 0).
+static inline int64_t round_div_i64(int64_t a, int64_t b)
+{
+	if (b == 0) return 0;
+	int64_t q = a / b;
+	int64_t r = a % b;
+	if (abs_i64(r) * 2 >= abs_i64(b)) {
+		q += ((a >= 0) == (b >= 0)) ? 1 : -1;
+	}
+	return q;
+}
 
 uint16_t ElsCore::getSyncSpeedScalePermille()
 {
@@ -81,6 +111,7 @@ void ElsCore::init() {
 	sync_in = false;
 	sync_ref_z_um = 0;
 	sync_ref_spindle = 0;
+	sync_c0_abs_ticks = 0;
 	sync_speed_scale_fp = (int32_t)FP_SCALE;
 	sync_last_adjust_ms = millis();
 	sync_abs_error_um = 0;
@@ -108,6 +139,7 @@ void ElsCore::setEnabled(bool on) {
 		sync_in = false;
 		sync_speed_scale_fp = (int32_t)FP_SCALE;
 		sync_abs_error_um = 0;
+		sync_c0_abs_ticks = 0;
 	} else if (sync_enabled && !was_enabled) {
 		// Continuous sync: keep moving; reset controller state on enable
 		sync_waiting = false;
@@ -115,6 +147,7 @@ void ElsCore::setEnabled(bool on) {
 		sync_speed_scale_fp = (int32_t)FP_SCALE;
 		sync_last_adjust_ms = millis();
 		sync_abs_error_um = 0;
+		sync_c0_abs_ticks = 0;
 	}
 }
 
@@ -173,6 +206,7 @@ void ElsCore::setSync(bool enabled, int32_t z_um, int32_t c_ticks) {
 		sync_speed_scale_fp = (int32_t)FP_SCALE;
 		sync_last_adjust_ms = millis();
 		sync_abs_error_um = 0;
+		sync_c0_abs_ticks = 0;
 	}
 }
 
@@ -297,11 +331,17 @@ void ElsCore::update() {
 		const int32_t sync_scale_min_fp = (int32_t)((FP_SCALE * (int64_t)SYNC_SPEED_MIN_PCT) / 100);
 		const int32_t sync_scale_max_fp = (int32_t)((FP_SCALE * (int64_t)SYNC_SPEED_MAX_PCT) / 100);
 
-		// Expected Z based on spindle position relative to the 0/0 reference.
-		// Note: Sign is inverted because Z encoder direction is opposite to step output.
-		const int64_t spindle_from_c0 = (int64_t)spindle_count - (int64_t)sync_phase_ticks;
-		const int64_t expected_z_num = spindle_from_c0 * (int64_t)pitch_um * (int64_t)direction_mul;
-		const int32_t expected_z = sync_z_um - (int32_t)(expected_z_num / (int64_t)C_COUNTS_PER_REV);
+		// Expected Z:
+		// Use only within-rev C phase and choose the *nearest* valid sync line.
+		// This matches threading reality: there are infinite correct re-engagement points
+		// spaced by 1 revolution (1 pitch) along Z.
+		const int64_t pitch_dir = (int64_t)pitch_um * (int64_t)direction_mul;
+		const int32_t c_now = mod_pos_i32(spindle_count, C_COUNTS_PER_REV);
+		const int32_t c0 = mod_pos_i32(sync_phase_ticks, C_COUNTS_PER_REV);
+		const int32_t d_ticks = wrap_diff_i32(c_now - c0, C_COUNTS_PER_REV);
+		const int64_t offset_um = ((int64_t)d_ticks * pitch_dir) / (int64_t)C_COUNTS_PER_REV;
+		const int64_t k = round_div_i64((int64_t)sync_z_um - (int64_t)z_um - offset_um, pitch_dir);
+		const int32_t expected_z = (int32_t)((int64_t)sync_z_um - k * pitch_dir - offset_um);
 		const int32_t z_error = z_um - expected_z;
 		const int32_t abs_z_error = abs_i32(z_error);
 		sync_abs_error_um = (abs_z_error > 65535) ? 65535 : (uint16_t)abs_z_error;
@@ -315,8 +355,8 @@ void ElsCore::update() {
 				(unsigned)ElsCore::getSyncSpeedScalePermille(),
 				(long)z_um,
 				(long)expected_z,
-				(long)spindle_count,
-				(long)sync_phase_ticks);
+				(long)c_now,
+				(long)c0);
 		}
 #endif
 
@@ -335,9 +375,17 @@ void ElsCore::update() {
 			int32_t target_scale_fp = (int32_t)FP_SCALE;
 			if (abs_z_error > SYNC_DEADBAND_UM)
 			{
+				// We want the trim to work *both directions* of spindle motion.
+				// Increasing the scale increases the step output magnitude in the
+				// current movement direction.
+				const int32_t pitch_abs = (pitch_um < 0) ? -pitch_um : pitch_um;
+				// Sign of nominal Z motion (based on spindle direction and pitch mapping).
+				const int32_t move_sign = (((int64_t)spindle_delta * (int64_t)pitch_dir) < 0) ? -1 : 1;
 				// error_frac_fp ~= (z_error / pitch) in fixed-point
-				const int64_t error_frac_fp = ((int64_t)z_error * (int64_t)FP_SCALE) / (int64_t)pitch_um;
-				const int64_t correction_fp = -((error_frac_fp * (int64_t)SYNC_K_NUM) / (int64_t)SYNC_K_DEN);
+				const int64_t error_frac_fp = ((int64_t)z_error * (int64_t)FP_SCALE) / (int64_t)pitch_abs;
+				// Positive z_error means the leadscrew is "ahead" of expected.
+				// Apply negative feedback: correction sign must flip with movement direction.
+				const int64_t correction_fp = -((int64_t)move_sign) * ((error_frac_fp * (int64_t)SYNC_K_NUM) / (int64_t)SYNC_K_DEN);
 				int64_t scale_fp_64 = (int64_t)FP_SCALE + correction_fp;
 				if (scale_fp_64 < (int64_t)sync_scale_min_fp) scale_fp_64 = (int64_t)sync_scale_min_fp;
 				if (scale_fp_64 > (int64_t)sync_scale_max_fp) scale_fp_64 = (int64_t)sync_scale_max_fp;

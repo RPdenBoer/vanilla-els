@@ -68,6 +68,7 @@ private:
     static int32_t sync_tolerance_in_ticks; // Tolerance for sync acquisition (ticks)
     static int32_t sync_ref_z_um;
     static int32_t sync_ref_spindle;
+    static int64_t sync_c0_abs_ticks;    // Absolute spindle count at theoretical C0 crossing
 	static int32_t sync_speed_scale_fp;
 	static uint32_t sync_last_adjust_ms;
     static uint16_t sync_abs_error_um;
