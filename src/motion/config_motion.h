@@ -23,7 +23,7 @@ static constexpr int32_t SPINDLE_JOG_RPM = 200; // Constant RPM for long-press j
 static constexpr uint32_t SPINDLE_JOG_PRESS_MS = 350; // Long-press threshold for jog
 static constexpr bool SPINDLE_INVERT_DIR = false;
 static constexpr uint32_t SPINDLE_PULSE_US = 2;          // Step pulse width
-static constexpr uint32_t SPINDLE_RMT_RES_HZ = 500000;   // 2us tick to allow long low times
+static constexpr uint32_t SPINDLE_RMT_RES_HZ = 10000000; // 10MHz (0.1us) tick for fine RPM resolution
 static constexpr uint32_t SPINDLE_MIN_STEP_PERIOD_US = 12;   // ~83k steps/s cap
 static constexpr uint32_t SPINDLE_MAX_STEP_PERIOD_US = 50000; // 20 Hz min
 
@@ -98,15 +98,15 @@ static constexpr int32_t  ELS_RMT_CHUNK_STEPS = 200; // keep small to reduce pha
 static constexpr uint32_t SYNC_ADJUST_INTERVAL_MS = 50;
 
 // Don't adjust for very small errors (microns)
-static constexpr int32_t SYNC_DEADBAND_UM = 50;
+static constexpr int32_t SYNC_DEADBAND_UM = 25;
 
 // Sync state hysteresis thresholds (microns)
 static constexpr int32_t SYNC_IN_TOL_UM = 100;
 static constexpr int32_t SYNC_OUT_TOL_UM = 200;
 
 // Clamp speed trim multiplier range (percent of nominal)
-static constexpr int32_t SYNC_SPEED_MIN_PCT = 25;   // 0.25x
-static constexpr int32_t SYNC_SPEED_MAX_PCT = 175;  // 1.75x
+static constexpr int32_t SYNC_SPEED_MIN_PCT = 5;   // 0.05x
+static constexpr int32_t SYNC_SPEED_MAX_PCT = 200;  // 2.00x
 
 // Proportional gain K = SYNC_K_NUM / SYNC_K_DEN applied to (z_error / pitch)
 static constexpr int32_t SYNC_K_NUM = 1;

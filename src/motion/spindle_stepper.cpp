@@ -27,12 +27,17 @@ int8_t SpindleStepper::jog_dir = 0;
 
 uint32_t SpindleStepper::last_update_us = 0;
 uint32_t SpindleStepper::last_dt_us = 0;
-uint32_t SpindleStepper::step_period_us = 0;
+uint32_t SpindleStepper::step_period_ticks = 0;
 int32_t SpindleStepper::steps_per_sec = 0;
 int64_t SpindleStepper::step_accumulator_fp = 0;
 bool SpindleStepper::rmt_ready = false;
 
 static constexpr int64_t FP_SCALE = 65536;
+
+// Min/max step period in RMT ticks (computed from config)
+// At 10MHz: 1 tick = 0.1us. 3000 RPM with 1600 steps = 12.5us = 125 ticks
+static constexpr uint32_t MIN_STEP_PERIOD_TICKS = (uint32_t)((uint64_t)SPINDLE_MIN_STEP_PERIOD_US * SPINDLE_RMT_RES_HZ / 1000000UL);
+static constexpr uint32_t MAX_STEP_PERIOD_TICKS = (uint32_t)((uint64_t)SPINDLE_MAX_STEP_PERIOD_US * SPINDLE_RMT_RES_HZ / 1000000UL);
 
 // ============================================================================
 // Initialization
@@ -213,41 +218,46 @@ void SpindleStepper::updateSpeed() {
         }
     }
     
-    // Calculate step period from RPM×10
-    // period_us = 60e6 * 10 / (RPM×10 * STEPS_PER_REV)
+    // Calculate step period from RPM×10 directly in RMT ticks for full resolution
+    // period_ticks = 60 * RMT_HZ / (RPM * STEPS_PER_REV)
+    //              = 600 * RMT_HZ / (RPM×10 * STEPS_PER_REV)
 
-	const int16_t min_rpm_x10 = (int16_t)(SPINDLE_MIN_RPM * 10);
+    const int16_t min_rpm_x10 = (int16_t)(SPINDLE_MIN_RPM * 10);
     if (current_rpm < min_rpm_x10) {
         // Stopped or too slow
-        step_period_us = 0;
+        step_period_ticks = 0;
         steps_per_sec = 0;
         running = false;
         step_accumulator_fp = 0;
     } else {
-		const int32_t denom = (int32_t)current_rpm * (int32_t)SPINDLE_STEPS_PER_REV;
-		if (denom <= 0) {
-			step_period_us = 0;
-			running = false;
-			steps_per_sec = 0;
-		} else {
-			uint32_t unclamped_period_us = (uint32_t)((600000000LL) / (int64_t)denom);
-            step_period_us = unclamped_period_us;
-            if (step_period_us < SPINDLE_MIN_STEP_PERIOD_US)
-                step_period_us = SPINDLE_MIN_STEP_PERIOD_US;
-            if (step_period_us > SPINDLE_MAX_STEP_PERIOD_US)
-                step_period_us = SPINDLE_MAX_STEP_PERIOD_US;
-			// Always derive steps_per_sec from the (possibly clamped) period so that
-			// telemetry and position accumulation match the actual waveform.
-			steps_per_sec = (step_period_us > 0) ? (int32_t)(1000000UL / step_period_us) : 0;
-			running = (steps_per_sec > 0);
+        const int64_t denom = (int64_t)current_rpm * (int64_t)SPINDLE_STEPS_PER_REV;
+        if (denom <= 0) {
+            step_period_ticks = 0;
+            running = false;
+            steps_per_sec = 0;
+        } else {
+            // Compute period directly in RMT ticks (full resolution, no µs quantization)
+            // period_ticks = 600 * RMT_HZ / (RPM×10 * steps_per_rev)
+            uint32_t unclamped_ticks = (uint32_t)(((int64_t)600 * (int64_t)SPINDLE_RMT_RES_HZ + (denom / 2)) / denom);
+            step_period_ticks = unclamped_ticks;
+            if (step_period_ticks < MIN_STEP_PERIOD_TICKS)
+                step_period_ticks = MIN_STEP_PERIOD_TICKS;
+            if (step_period_ticks > MAX_STEP_PERIOD_TICKS)
+                step_period_ticks = MAX_STEP_PERIOD_TICKS;
+            // Derive steps_per_sec from ticks
+            steps_per_sec = (step_period_ticks > 0) ? (int32_t)(SPINDLE_RMT_RES_HZ / step_period_ticks) : 0;
+            running = (steps_per_sec > 0);
         }
     }
 
-    // Update public RPM based on actual step rate
-    if (steps_per_sec > 0) {
-		// Compute RPM in 0.1 RPM units (RPM×10) to allow UI to show a real decimal.
-		// rpm_x10 = steps_per_sec * 60 * 10 / steps_per_rev
-		int16_t actual_rpm_x10 = (int16_t)((steps_per_sec * 600) / SPINDLE_STEPS_PER_REV);
+    // Update public RPM based on the actual generated step period (in ticks).
+    // rpm_x10 = 600 * RMT_HZ / (period_ticks * steps_per_rev)
+    if (step_period_ticks > 0) {
+        const int64_t denom_rpm = (int64_t)step_period_ticks * (int64_t)SPINDLE_STEPS_PER_REV;
+        int16_t actual_rpm_x10 = 0;
+        if (denom_rpm > 0) {
+            actual_rpm_x10 = (int16_t)(((int64_t)600 * (int64_t)SPINDLE_RMT_RES_HZ + (denom_rpm / 2)) / denom_rpm);
+        }
 		rpm_abs = (actual_rpm_x10 < 0) ? (int16_t)-actual_rpm_x10 : actual_rpm_x10;
 		rpm_signed = (int16_t)(actual_rpm_x10 * direction);
     } else {
@@ -257,35 +267,59 @@ void SpindleStepper::updateSpeed() {
 }
 
 void SpindleStepper::updateRmtLoop() {
-	static uint32_t prev_period_us = 0;
+	static uint32_t prev_period_ticks = 0;
 	static bool loop_active = false;
+    static uint8_t prev_symbol_count = 0;
 
-	const bool want_run = rmt_ready && running && direction != 0 && step_period_us > 0;
+	const bool want_run = rmt_ready && running && direction != 0 && step_period_ticks > 0;
 
 	if (want_run) {
-		if (step_period_us != prev_period_us || !loop_active) {
-			const uint32_t tick_us = 1000000UL / SPINDLE_RMT_RES_HZ;
-			uint32_t high_us = SPINDLE_PULSE_US;
-			if (high_us < tick_us) high_us = tick_us;
-			if (high_us >= step_period_us) high_us = step_period_us - tick_us;
-			uint32_t low_us = step_period_us - high_us;
-
-			uint32_t high_ticks = (high_us + tick_us - 1) / tick_us;
-			uint32_t low_ticks = (low_us + tick_us - 1) / tick_us;
+		if (step_period_ticks != prev_period_ticks || !loop_active) {
+			// Period is already in RMT ticks - use directly
+			const uint32_t total_ticks = step_period_ticks;
+			const uint32_t ticks_per_us = SPINDLE_RMT_RES_HZ / 1000000UL;
+			uint32_t high_ticks = SPINDLE_PULSE_US * ticks_per_us;
 			if (high_ticks < 1) high_ticks = 1;
-			if (low_ticks < 1) low_ticks = 1;
+			if (high_ticks >= total_ticks) high_ticks = total_ticks - 1;
+			uint32_t low_ticks_total = total_ticks - high_ticks;
+			if (low_ticks_total < 1) low_ticks_total = 1;
 			if (high_ticks > 32767) high_ticks = 32767;
-			if (low_ticks > 32767) low_ticks = 32767;
 
-			rmt_data_t symbol = {};
-			symbol.level0 = 1;
-			symbol.duration0 = (uint16_t)high_ticks;
-			symbol.level1 = 0;
-			symbol.duration1 = (uint16_t)low_ticks;
+			// With 0.1us (10MHz) ticks, low duration can exceed 32767 ticks even at moderate RPM.
+			// Split the low time across additional symbols.
+			// 1 RPM = 37.5ms period = ~375,000 ticks. 32k per symbol -> ~12 symbols. Keep safe margin.
+			static rmt_data_t symbols[24];
+			uint8_t symbol_count = 0;
 
-			rmtWriteLooping(SPINDLE_STEP_PIN, &symbol, 1);
+			uint32_t low_ticks0 = low_ticks_total;
+			if (low_ticks0 > 32767) low_ticks0 = 32767;
+			symbols[0] = {};
+			symbols[0].level0 = 1;
+			symbols[0].duration0 = (uint16_t)high_ticks;
+			symbols[0].level1 = 0;
+			symbols[0].duration1 = (uint16_t)low_ticks0;
+			symbol_count = 1;
+
+			uint32_t remaining = low_ticks_total - low_ticks0;
+			while (remaining > 0 && symbol_count < (uint8_t)(sizeof(symbols) / sizeof(symbols[0]))) {
+				uint32_t slice = remaining;
+				if (slice > 32767) slice = 32767;
+				symbols[symbol_count] = {};
+				// Keep the line low for the entire symbol.
+				symbols[symbol_count].level0 = 0;
+				symbols[symbol_count].duration0 = (uint16_t)slice;
+				symbols[symbol_count].level1 = 0;
+				symbols[symbol_count].duration1 = 0;
+				symbol_count++;
+				remaining -= slice;
+			}
+
+			if (symbol_count != prev_symbol_count || step_period_ticks != prev_period_ticks || !loop_active) {
+				rmtWriteLooping(SPINDLE_STEP_PIN, symbols, symbol_count);
+				prev_symbol_count = symbol_count;
+			}
 			loop_active = true;
-			prev_period_us = step_period_us;
+			prev_period_ticks = step_period_ticks;
 		}
 
 		if (SPINDLE_EN_PIN >= 0) {
@@ -295,7 +329,8 @@ void SpindleStepper::updateRmtLoop() {
 		if (loop_active) {
 			rmtWriteLooping(SPINDLE_STEP_PIN, nullptr, 0);
 			loop_active = false;
-			prev_period_us = 0;
+			prev_period_ticks = 0;
+            prev_symbol_count = 0;
 		}
 
 		if (SPINDLE_EN_PIN >= 0) {
@@ -366,8 +401,9 @@ void SpindleStepper::stepImmediate(int32_t count) {
     static rmt_data_t rmt_buf[100];
     static bool buf_init = false;
     if (!buf_init) {
-        const uint32_t tick_us = 1000000UL / SPINDLE_RMT_RES_HZ;
-        uint32_t pulse_ticks = (SPINDLE_PULSE_US + tick_us - 1) / tick_us;
+        // Convert pulse width from microseconds to RMT ticks
+        const uint32_t ticks_per_us = SPINDLE_RMT_RES_HZ / 1000000UL;
+        uint32_t pulse_ticks = SPINDLE_PULSE_US * ticks_per_us;
         if (pulse_ticks < 1) pulse_ticks = 1;
         rmt_data_t pulse = {};
         pulse.level0 = 1;
@@ -400,7 +436,7 @@ void SpindleStepper::stop() {
 	jog_active = false;
 	jog_dir = 0;
 	pending_soft_toggle_dir = 0;
-	step_period_us = 0;
+	step_period_ticks = 0;
 	steps_per_sec = 0;
 	step_accumulator_fp = 0;
 	updateRmtLoop();

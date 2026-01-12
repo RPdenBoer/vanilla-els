@@ -699,19 +699,23 @@ void UIManager::update() {
 		if (spindleRunning)
 		{
 			// Show actual RPM in white when enabled/toggled on
-			const int32_t rpm_x10 = EncoderProxy::getRpmSigned();
-			const int32_t abs_rpm_x10 = (rpm_x10 < 0) ? -rpm_x10 : rpm_x10;
+			// Quantize to nearest valid display step based on segment
+			const int32_t rpm_x10_raw = EncoderProxy::getRpmSigned();
+			const int32_t abs_rpm_x10_raw = (rpm_x10_raw < 0) ? -rpm_x10_raw : rpm_x10_raw;
+			const int32_t abs_rpm_x10 = quantizeRpmX10ForDisplay(abs_rpm_x10_raw);
 			const int32_t rpm_int = abs_rpm_x10 / 10;
 			const int32_t rpm_frac = abs_rpm_x10 % 10;
-			snprintf(buf, sizeof(buf), "%s%ld.%01ld", (rpm_x10 < 0) ? "-" : "", (long)rpm_int, (long)rpm_frac);
+			snprintf(buf, sizeof(buf), "%s%ld.%01ld", (rpm_x10_raw < 0) ? "-" : "", (long)rpm_int, (long)rpm_frac);
 			lv_label_set_text(lbl_c, buf);
 			lv_obj_set_style_text_color(lbl_c, lv_color_white(), LV_PART_MAIN);
 		}
 		else
 		{
 			// Show target RPM in blue-grey when stopped
-			int16_t targetRpm_x10 = EncoderProxy::getTargetRpm();
-			if (targetRpm_x10 < 0) targetRpm_x10 = 0;
+			// Quantize to nearest valid display step based on segment
+			int16_t targetRpm_x10_raw = EncoderProxy::getTargetRpm();
+			if (targetRpm_x10_raw < 0) targetRpm_x10_raw = 0;
+			const int32_t targetRpm_x10 = quantizeRpmX10ForDisplay(targetRpm_x10_raw);
 			const int32_t tgt_int = targetRpm_x10 / 10;
 			const int32_t tgt_frac = targetRpm_x10 % 10;
 			snprintf(buf, sizeof(buf), "%ld.%01ld", (long)tgt_int, (long)tgt_frac);

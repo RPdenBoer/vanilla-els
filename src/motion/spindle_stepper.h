@@ -59,7 +59,7 @@ private:
     
     static uint32_t last_update_us;
     static uint32_t last_dt_us;
-    static uint32_t step_period_us;   // Microseconds per step
+    static uint32_t step_period_ticks; // Step period in RMT ticks (full resolution)
     static int32_t steps_per_sec;
     static int64_t step_accumulator_fp;
     static bool rmt_ready;

@@ -94,18 +94,46 @@ int32_t MpgEncoder::getDelta() {
 void MpgEncoder::update() {
     // In RPM control mode, map position to RPM
     if (mode == MpgMode::RPM_CONTROL) {
-        // Clamp position to valid range.
-        // We now treat 1 MPG count as 0.1 RPM, so full-scale to 3000.0 RPM
-        // requires position up to SPINDLE_MAX_RPM * 10.
-        static constexpr int32_t MPG_MAX_POS = (int32_t)SPINDLE_MAX_RPM * 10;
+        // Non-linear mapping using shared config constants.
+        // Fine control at low RPM, coarse at high RPM to mask timing quantization.
+        //
+        // Calculate position thresholds from RPM segment config
+        static constexpr int32_t SEG1_RPM_RANGE = RPM_SEG1_END;
+        static constexpr int32_t SEG2_RPM_RANGE = RPM_SEG2_END - RPM_SEG1_END;
+        static constexpr int32_t SEG3_RPM_RANGE = RPM_SEG3_END - RPM_SEG2_END;
+        static constexpr int32_t SEG4_RPM_RANGE = RPM_SEG4_END - RPM_SEG3_END;
+        
+        // Position counts needed for each segment (RPM * 10 / step_x10)
+        static constexpr int32_t SEG1_COUNTS = (SEG1_RPM_RANGE * 10) / RPM_SEG1_STEP_X10;
+        static constexpr int32_t SEG2_COUNTS = (SEG2_RPM_RANGE * 10) / RPM_SEG2_STEP_X10;
+        static constexpr int32_t SEG3_COUNTS = (SEG3_RPM_RANGE * 10) / RPM_SEG3_STEP_X10;
+        static constexpr int32_t SEG4_COUNTS = (SEG4_RPM_RANGE * 10) / RPM_SEG4_STEP_X10;
+        
+        static constexpr int32_t SEG1_MAX_POS = SEG1_COUNTS;
+        static constexpr int32_t SEG2_MAX_POS = SEG1_MAX_POS + SEG2_COUNTS;
+        static constexpr int32_t SEG3_MAX_POS = SEG2_MAX_POS + SEG3_COUNTS;
+        static constexpr int32_t SEG4_MAX_POS = SEG3_MAX_POS + SEG4_COUNTS;
+        static constexpr int32_t MPG_MAX_POS = SEG4_MAX_POS;
+        
         noInterrupts();
         if (position < 0) position = 0;
         if (position > MPG_MAX_POS) position = MPG_MAX_POS;
         int32_t pos = position;
         interrupts();
-        
-        // Mapping: 1 count = 0.1 RPM
-        rpm_setting = (int16_t)pos;
+
+        int32_t rpm_x10 = 0;
+        if (pos <= SEG1_MAX_POS) {
+            rpm_x10 = pos * RPM_SEG1_STEP_X10;
+        } else if (pos <= SEG2_MAX_POS) {
+            rpm_x10 = (RPM_SEG1_END * 10) + (pos - SEG1_MAX_POS) * RPM_SEG2_STEP_X10;
+        } else if (pos <= SEG3_MAX_POS) {
+            rpm_x10 = (RPM_SEG2_END * 10) + (pos - SEG2_MAX_POS) * RPM_SEG3_STEP_X10;
+        } else {
+            rpm_x10 = (RPM_SEG3_END * 10) + (pos - SEG3_MAX_POS) * RPM_SEG4_STEP_X10;
+        }
+        if (rpm_x10 < 0) rpm_x10 = 0;
+        if (rpm_x10 > (int32_t)SPINDLE_MAX_RPM * 10) rpm_x10 = (int32_t)SPINDLE_MAX_RPM * 10;
+        rpm_setting = (int16_t)rpm_x10;
     }
     // In jog modes, position is unbounded and delta is consumed by stepper
 }
