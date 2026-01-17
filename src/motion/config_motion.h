@@ -43,8 +43,8 @@ static constexpr int32_t MPG_JOG_C_STEPS_PER_COUNT = 1;
 
 // Direction switch inputs (active LOW, external pullups recommended)
 // Both off = stopped, FWD on = forward, REV on = reverse
-static constexpr int SPINDLE_FWD_PIN = 36; // Forward switch (input only pin)
-static constexpr int SPINDLE_REV_PIN = 39; // Reverse switch (input only pin, VN)
+static constexpr int SPINDLE_FWD_PIN = 21; // Forward switch (input only pin)
+static constexpr int SPINDLE_REV_PIN = 22; // Reverse switch (input only pin, VN)
 
 // Acceleration limit (RPM per second) - prevents jerky speed changes
 static constexpr int32_t SPINDLE_ACCEL_RPM_PER_SEC = 500;
@@ -61,7 +61,7 @@ static constexpr int Z_PINB = 14;
 
 // Set to true if direction is reversed after wiring
 static constexpr bool X_INVERT_DIR = false;
-static constexpr bool Z_INVERT_DIR = true;
+static constexpr bool Z_INVERT_DIR = false;
 
 // ============================================================================
 // Electronic Leadscrew (Z axis stepper driver)
@@ -74,7 +74,7 @@ static constexpr int ELS_EN_PIN   = -1;
 // Most drivers use active-low enable
 static constexpr bool ELS_EN_ACTIVE_LOW = true;
 // Set true if DIR sense is opposite of what you expect
-static constexpr bool ELS_INVERT_DIR = false;
+static constexpr bool ELS_INVERT_DIR = true;
 
 // Step pulse width (us)
 static constexpr int32_t ELS_PULSE_US = 2;
@@ -128,11 +128,11 @@ static constexpr int SPI_SLAVE_CS   = 13;
 // Reserved pins (future X stepper axis)
 // ============================================================================
 // X step should use RMT-capable output for clean pulse timing.
-static constexpr int X_STEP_PIN = 21;
-static constexpr int X_DIR_PIN  = 22;
-static constexpr int X_EN_PIN   = -1; // set if enable line is needed
+// static constexpr int X_STEP_PIN = 21;
+// static constexpr int X_DIR_PIN  = 22;
+// static constexpr int X_EN_PIN   = -1; // set if enable line is needed
 
 // Reserved pins (future ELS physical buttons)
 // NOTE: GPIO1/3 are UART0. Using these will interfere with Serial logging/programming.
-static constexpr int ELS_BTN_LEFT_PIN  = 1;
-static constexpr int ELS_BTN_RIGHT_PIN = 3;
+static constexpr int ELS_BTN_LEFT_PIN = 15;
+static constexpr int ELS_BTN_RIGHT_PIN = 5;

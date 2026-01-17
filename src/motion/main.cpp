@@ -10,6 +10,7 @@
 #include "encoder_motion.h"
 #include "stepper.h"
 #include "els_core.h"
+#include "els_buttons.h"
 #include "ota_motion.h"
 #include "spindle_stepper.h"
 #include "mpg_encoder.h"
@@ -68,6 +69,9 @@ static void motionTask(void *param) {
 			SpindleStepper::update();
 		}
 
+		// Update physical ELS buttons (short press toggle, long press jog)
+		ElsButtons::update();
+
 		// Run ELS core logic (calculates and outputs steps)
         ElsCore::update();
 
@@ -121,6 +125,9 @@ void setup() {
     // Initialize ELS core
     ElsCore::init();
     Serial.println("[Motion] ELS core OK");
+
+	// Initialize physical ELS buttons (wired to motion board)
+	ElsButtons::init();
     
     // Initialize SPI slave (for communication with UI board)
     if (!SpiSlave::init()) {
@@ -157,7 +164,6 @@ static int32_t prev_endstop_min = 0;
 static int32_t prev_endstop_max = 0;
 static bool prev_sync_enabled = false;
 static int32_t prev_sync_z = 0;
-static uint8_t prev_cmd_sequence = 0xFF;
 
 void loop() {
 	OtaMotion::handle();
@@ -180,6 +186,7 @@ void loop() {
     status.flags.els_enabled = ElsCore::isEnabled();
     status.flags.els_fault = ElsCore::hasFault();
     status.flags.endstop_hit = ElsCore::endstopTriggered();
+	status.els_dir_mul = ElsCore::isEnabled() ? ElsCore::getDirectionMul() : 0;
 	// Report "spindle toggled on" (commanded direction != 0), not actual motion.
 	// This lets UI show an "active" (white) RPM display even at 0 RPM.
 	status.flags.spindle_moving = (SpindleStepper::getDirection() != 0);
@@ -214,27 +221,21 @@ void loop() {
 			ESP.restart();
 		}
 
-		// Handle spindle toggle command from UI
-		if (cmd.sequence != prev_cmd_sequence) {
-			prev_cmd_sequence = cmd.sequence;
-			if (cmd.cmd == MotionCommand::SPINDLE_TOGGLE_FWD) {
-				// Only allow spindle toggle when not in JOG_C mode
-				if (MpgEncoder::getMode() != MpgMode::JOG_C) {
-					SpindleStepper::queueSoftToggle(1);
-				}
-			}
+		// Allow UI to act as a pseudo e-stop ONLY (no soft enable/jog).
+		if (!OtaMotion::isActive() && cmd.cmd == MotionCommand::DISABLE_ELS)
+		{
+			ElsCore::setJog(0, false);
+			ElsCore::setEnabled(false);
+			ElsCore::setDirectionMul(1);
 		}
+
         
-        bool els_en = (cmd.flags & 0x01);
         bool endstop_min_en = (cmd.endstop_min_enabled != 0);
         bool endstop_max_en = (cmd.endstop_max_enabled != 0);
         
 #if DEBUG_SPI_LOGGING
         // Log changes from UI
-        if (els_en != prev_els_enabled) {
-            Serial.printf("[Motion] ELS %s (from UI)\n", els_en ? "ENABLED" : "DISABLED");
-            prev_els_enabled = els_en;
-        }
+		// ELS enable/dir/jog are controlled by motion-side physical buttons.
         if (cmd.pitch_um != prev_pitch_um) {
             Serial.printf("[Motion] Pitch changed: %ld um (%.3f mm)\n", 
                 cmd.pitch_um, cmd.pitch_um / 1000.0f);
@@ -273,10 +274,8 @@ void loop() {
 		}
 		else
 		{
-			ElsCore::setEnabled(els_en);
+			// Keep configuration flowing from UI, but do NOT override ELS on/off or jog state.
 			ElsCore::setPitchUm(cmd.pitch_um);
-			ElsCore::setDirectionMul(cmd.direction_mul);
-			ElsCore::setJog(cmd.jog_dir, cmd.jog_active != 0);
 		}
 		ElsCore::setSync(cmd.sync_enabled != 0, cmd.sync_z_um, cmd.sync_c_ticks);
         ElsCore::setEndstops(
@@ -303,7 +302,6 @@ void loop() {
         // No communication - disable ELS for safety
         ElsCore::setEnabled(false);
 		ElsCore::setJog(0, false);
-		prev_cmd_sequence = 0xFF;
     }
     
     // Small delay - SPI handling doesn't need to be super fast

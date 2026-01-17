@@ -11,7 +11,7 @@
 static constexpr size_t PROTOCOL_PACKET_SIZE = 32;
 
 // Protocol version for compatibility checking
-static constexpr uint8_t PROTOCOL_VERSION = 12;
+static constexpr uint8_t PROTOCOL_VERSION = 13;
 
 // ============================================================================
 // MPG Mode (Manual Pulse Generator routing)
@@ -38,7 +38,6 @@ enum class MotionCommand : uint8_t
 	CLEAR_ENDSTOPS,	 // Clear endstop limits
 	SYNC_REQUEST,	 // Request full state sync
 	SET_MPG_MODE,	 // Set MPG routing mode (RPM/Z jog/C jog)
-	SPINDLE_TOGGLE_FWD, // Toggle spindle forward (momentary command)
 };
 
 // ============================================================================
@@ -101,7 +100,7 @@ static_assert(sizeof(CommandPacket) == PROTOCOL_PACKET_SIZE, "CommandPacket size
 struct __attribute__((packed)) StatusPacket {
     uint8_t version;              // Protocol version        [1]
     MotionStatusFlags flags;      // Status flags            [1]
-    uint8_t fault_code;           // Fault code if any       [1]
+	int8_t els_dir_mul;           // ELS direction (+1/-1, 0 when off) [1]
     SyncStateProto sync_state;    // Sync state              [1]
     
     int32_t x_count;              // X encoder raw count     [4]

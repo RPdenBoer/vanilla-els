@@ -28,18 +28,14 @@ public:
     // Build a command packet with current settings
     static void buildCommand(CommandPacket& cmd);
     
-    // Update internal state from UI settings (call before poll)
-    static void setElsEnabled(bool enabled);
     static void setPitchUm(int32_t pitch_um);
-    static void setDirectionMul(int8_t mul);
     static void setEndstops(int32_t min_um, int32_t max_um, bool min_en, bool max_en);
     static void setSync(int32_t z_um, bool enabled, uint16_t c_ticks);
 	static void setMpgMode(MpgModeProto mode);
 	static MpgModeProto getMpgMode() { return mpg_mode; }
-	static void setJog(bool active, int8_t dir);
 	static void setOtaRequest(bool active);
 	static void setRebootRequest(bool active);
-	static void requestSpindleToggleFwd();
+    static void requestDisableEls();
 
 private:
     static StatusPacket last_status;
@@ -48,9 +44,7 @@ private:
     static uint8_t sequence;
     
     // Current command state
-    static bool els_enabled;
     static int32_t pitch_um;
-    static int8_t direction_mul;
     static int32_t endstop_min_um;
     static int32_t endstop_max_um;
     static bool endstop_min_enabled;
@@ -59,9 +53,7 @@ private:
     static uint16_t sync_c_ticks;
     static bool sync_enabled;
 	static MpgModeProto mpg_mode;
-	static bool jog_active;
-	static int8_t jog_dir;
 	static bool ota_request;
 	static bool reboot_request;
-	static MotionCommand pending_cmd;
+    static volatile MotionCommand pending_cmd;
 };

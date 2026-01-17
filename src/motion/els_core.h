@@ -22,6 +22,7 @@ public:
     
     // Direction multiplier (+1 normal, -1 reversed for jog)
     static void setDirectionMul(int8_t mul);
+    static int8_t getDirectionMul() { return direction_mul; }
 
     // Sync helper (phase-lock to spindle based on Z=0/C=0 reference)
     static void setSync(bool enabled, int32_t z_um, int32_t c_ticks);

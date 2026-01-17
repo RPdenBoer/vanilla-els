@@ -9,9 +9,7 @@ bool SpiMaster::connected = false;
 uint32_t SpiMaster::last_success_ms = 0;
 uint8_t SpiMaster::sequence = 0;
 
-bool SpiMaster::els_enabled = false;
 int32_t SpiMaster::pitch_um = 1000;  // Default 1mm pitch
-int8_t SpiMaster::direction_mul = 1;
 int32_t SpiMaster::endstop_min_um = 0;
 int32_t SpiMaster::endstop_max_um = 0;
 bool SpiMaster::endstop_min_enabled = false;
@@ -20,11 +18,9 @@ int32_t SpiMaster::sync_z_um = 0;
 uint16_t SpiMaster::sync_c_ticks = 0;
 bool SpiMaster::sync_enabled = false;
 MpgModeProto SpiMaster::mpg_mode = MpgModeProto::RPM_CONTROL;
-bool SpiMaster::jog_active = false;
-int8_t SpiMaster::jog_dir = 0;
 bool SpiMaster::ota_request = false;
 bool SpiMaster::reboot_request = false;
-MotionCommand SpiMaster::pending_cmd = MotionCommand::NOP;
+volatile MotionCommand SpiMaster::pending_cmd = MotionCommand::NOP;
 
 // Use HSPI for communication with motion board
 static SPIClass hspi(HSPI);
@@ -97,10 +93,12 @@ bool SpiMaster::transact(const CommandPacket& cmd, StatusPacket& status) {
 void SpiMaster::buildCommand(CommandPacket& cmd) {
     memset(&cmd, 0, sizeof(cmd));
     cmd.version = PROTOCOL_VERSION;
-    cmd.cmd = pending_cmd;
-    pending_cmd = MotionCommand::NOP;
-    cmd.flags = els_enabled ? 1 : 0;
-    cmd.direction_mul = direction_mul;
+	MotionCommand c = pending_cmd;
+	cmd.cmd = c;
+	if (c != MotionCommand::NOP)
+		pending_cmd = MotionCommand::NOP;
+    cmd.flags = 0;
+    cmd.direction_mul = 1;
     cmd.pitch_um = pitch_um;
     cmd.endstop_min_um = endstop_min_um;
     cmd.endstop_max_um = endstop_max_um;
@@ -110,8 +108,8 @@ void SpiMaster::buildCommand(CommandPacket& cmd) {
 	cmd.sync_z_um = sync_z_um;
 	cmd.sync_c_ticks = sync_c_ticks;
 	cmd.sync_enabled = sync_enabled ? 1 : 0;
-	cmd.jog_dir = jog_active ? jog_dir : 0;
-	cmd.jog_active = jog_active ? 1 : 0;
+    cmd.jog_dir = 0;
+    cmd.jog_active = 0;
 	cmd.ota_request = ota_request ? 1 : 0;
 	cmd.reboot_request = reboot_request ? 1 : 0;
 	cmd.sequence = sequence++;
@@ -137,7 +135,7 @@ bool SpiMaster::poll() {
             prev_els_enabled = status.flags.els_enabled;
         }
         if (status.flags.els_fault && !prev_els_fault) {
-            Serial.printf("[Motion->UI] ELS FAULT! Code: %d\n", status.fault_code);
+            Serial.printf("[Motion->UI] ELS FAULT!\n");
         }
         prev_els_fault = status.flags.els_fault;
         
@@ -159,13 +157,9 @@ bool SpiMaster::poll() {
     return ok;
 }
 
-void SpiMaster::setElsEnabled(bool enabled) {
-#if DEBUG_SPI_LOGGING
-    if (enabled != els_enabled) {
-        Serial.printf("[UI->Motion] ELS %s\n", enabled ? "ENABLE" : "DISABLE");
-    }
-#endif
-    els_enabled = enabled;
+void SpiMaster::requestDisableEls()
+{
+    pending_cmd = MotionCommand::DISABLE_ELS;
 }
 
 void SpiMaster::setPitchUm(int32_t pitch) {
@@ -175,16 +169,6 @@ void SpiMaster::setPitchUm(int32_t pitch) {
     }
 #endif
     pitch_um = pitch;
-}
-
-void SpiMaster::setDirectionMul(int8_t mul) {
-    int8_t new_mul = (mul < 0) ? -1 : 1;
-#if DEBUG_SPI_LOGGING
-    if (new_mul != direction_mul) {
-        Serial.printf("[UI->Motion] Direction: %s\n", new_mul > 0 ? "NORMAL" : "REVERSE");
-    }
-#endif
-    direction_mul = new_mul;
 }
 
 void SpiMaster::setEndstops(int32_t min_um, int32_t max_um, bool min_en, bool max_en) {
@@ -230,23 +214,6 @@ void SpiMaster::setMpgMode(MpgModeProto mode)
 	mpg_mode = mode;
 }
 
-void SpiMaster::setJog(bool active, int8_t dir)
-{
-	int8_t new_dir = 0;
-	if (active)
-	{
-		if (dir > 0) new_dir = 1;
-		else if (dir < 0) new_dir = -1;
-	}
-#if DEBUG_SPI_LOGGING
-	if (active != jog_active || new_dir != jog_dir)
-	{
-		Serial.printf("[UI->Motion] Jog: %s dir=%d\n", active ? "ON" : "OFF", (int)new_dir);
-	}
-#endif
-	jog_active = active && (new_dir != 0);
-	jog_dir = new_dir;
-}
 
 void SpiMaster::setOtaRequest(bool active)
 {
@@ -270,7 +237,3 @@ void SpiMaster::setRebootRequest(bool active)
 	reboot_request = active;
 }
 
-void SpiMaster::requestSpindleToggleFwd()
-{
-	pending_cmd = MotionCommand::SPINDLE_TOGGLE_FWD;
-}

@@ -1,5 +1,6 @@
 #include "spindle_stepper.h"
 #include "config_motion.h"
+#include "dual_button_logic.h"
 #include "mpg_encoder.h"
 #include <Arduino.h>
 #include "esp32-hal-rmt.h"
@@ -15,13 +16,6 @@ int16_t SpindleStepper::current_rpm = 0;
 int8_t SpindleStepper::direction = 0;
 bool SpindleStepper::running = false;
 volatile int8_t SpindleStepper::pending_soft_toggle_dir = 0;
-bool SpindleStepper::prev_fwd_pressed = false;
-bool SpindleStepper::prev_rev_pressed = false;
-bool SpindleStepper::fwd_long_handled = false;
-bool SpindleStepper::rev_long_handled = false;
-uint32_t SpindleStepper::fwd_down_ms = 0;
-uint32_t SpindleStepper::rev_down_ms = 0;
-uint32_t SpindleStepper::last_toggle_ms = 0;
 bool SpindleStepper::jog_active = false;
 int8_t SpindleStepper::jog_dir = 0;
 
@@ -33,6 +27,14 @@ int64_t SpindleStepper::step_accumulator_fp = 0;
 bool SpindleStepper::rmt_ready = false;
 
 static constexpr int64_t FP_SCALE = 65536;
+
+static DualButtonState g_spindle_btn_state;
+static constexpr DualButtonConfig SPINDLE_BTN_CFG = {
+    .long_press_ms = SPINDLE_JOG_PRESS_MS,
+    .short_lockout_ms = 50,
+    .overlap_debounce_ms = 20,
+    .require_other_released_for_short = true,
+};
 
 // Min/max step period in RMT ticks (computed from config)
 // At 10MHz: 1 tick = 0.1us. 3000 RPM with 1600 steps = 12.5us = 125 ticks
@@ -56,10 +58,10 @@ bool SpindleStepper::init() {
     
     // Configure direction switch inputs
     // Note: GPIO 36/39 are input-only and don't have internal pullups.
-    pinMode(SPINDLE_FWD_PIN, INPUT);
-    pinMode(SPINDLE_REV_PIN, INPUT);
-    
-    // Note: MPG encoder is initialized separately in main.cpp
+	pinMode(SPINDLE_FWD_PIN, INPUT_PULLUP);
+	pinMode(SPINDLE_REV_PIN, INPUT_PULLUP);
+
+	// Note: MPG encoder is initialized separately in main.cpp
     
     // Initialize RMT for step generation
     rmt_ready = rmtInit(SPINDLE_STEP_PIN, RMT_TX_MODE, RMT_MEM_NUM_BLOCKS_1, SPINDLE_RMT_RES_HZ);
@@ -95,17 +97,9 @@ void SpindleStepper::readControls() {
     const bool fwd_pressed = (digitalRead(SPINDLE_FWD_PIN) == LOW);
     const bool rev_pressed = (digitalRead(SPINDLE_REV_PIN) == LOW);
 
-    const bool fwd_edge = fwd_pressed && !prev_fwd_pressed;
-    const bool rev_edge = rev_pressed && !prev_rev_pressed;
-    const bool fwd_released = !fwd_pressed && prev_fwd_pressed;
-    const bool rev_released = !rev_pressed && prev_rev_pressed;
-
     auto handle_short_press = [&](int8_t dir) {
         if (jog_active)
             return;
-        if ((now_ms - last_toggle_ms) < 50)
-            return;
-        last_toggle_ms = now_ms;
         if (direction != 0) {
             direction = 0;
         } else {
@@ -136,43 +130,17 @@ void SpindleStepper::readControls() {
         handle_short_press(soft_dir);
     }
 
-    if (fwd_edge) {
-        fwd_down_ms = now_ms;
-        fwd_long_handled = false;
-    }
-    if (rev_edge) {
-        rev_down_ms = now_ms;
-        rev_long_handled = false;
-    }
-
-    if (!jog_active && fwd_pressed && !rev_pressed && !fwd_long_handled &&
-        (now_ms - fwd_down_ms >= SPINDLE_JOG_PRESS_MS)) {
-        start_jog(1);
-        fwd_long_handled = true;
-    }
-    if (!jog_active && rev_pressed && !fwd_pressed && !rev_long_handled &&
-        (now_ms - rev_down_ms >= SPINDLE_JOG_PRESS_MS)) {
-        start_jog(-1);
-        rev_long_handled = true;
-    }
-
-    if (fwd_released) {
-        if (fwd_long_handled) {
-            stop_jog(1);
-        } else {
-            handle_short_press(1);
-        }
-    }
-    if (rev_released) {
-        if (rev_long_handled) {
-            stop_jog(-1);
-        } else {
-            handle_short_press(-1);
-        }
-    }
-
-    prev_fwd_pressed = fwd_pressed;
-    prev_rev_pressed = rev_pressed;
+	dualButtonUpdate(
+		g_spindle_btn_state,
+		SPINDLE_BTN_CFG,
+		fwd_pressed,
+		rev_pressed,
+		now_ms,
+		[]() { return false; },
+		handle_short_press,
+		[&](int8_t /*dir*/) { return !jog_active; },
+		start_jog,
+		stop_jog);
     
     // Get RPM x10 from MPG encoder (only when in RPM control mode)
     if (MpgEncoder::getMode() == MpgMode::RPM_CONTROL) {

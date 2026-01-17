@@ -54,15 +54,18 @@ static void updateFromMotionBoard() {
         LeadscrewProxy::setBoundsExceeded(true);
     }
     prev_endstop_hit = status.flags.endstop_hit;
+
+	// Reflect actual ELS state from motion board (ELS is physical-only)
+	LeadscrewProxy::setEnabled(status.flags.els_enabled != 0);
+    if (status.flags.els_enabled)
+    {
+        LeadscrewProxy::setDirectionMul(status.els_dir_mul);
+    }
 }
 
 static void sendCommandsToMotionBoard() {
     // Update SPI master state from proxies
-    SpiMaster::setElsEnabled(LeadscrewProxy::isEnabled());
     SpiMaster::setPitchUm(LeadscrewProxy::getPitchUm());
-    SpiMaster::setDirectionMul(LeadscrewProxy::getDirectionMul());
-	const int8_t jog_dir = UIManager::getJogDir();
-	SpiMaster::setJog(jog_dir != 0, jog_dir);
 	SpiMaster::setOtaRequest(OtaProxy::isActive());
 	SpiMaster::setRebootRequest(OtaProxy::shouldRequestReboot());
     SpiMaster::setEndstops(
@@ -79,9 +82,6 @@ static void sendCommandsToMotionBoard() {
 // ============================================================================
 static void ui_timer_cb(lv_timer_t *t) {
     (void)t;
-
-	// Poll physical buttons
-	UIManager::pollPhysicalButtons();
 
 	// Get latest data from motion board
     updateFromMotionBoard();
@@ -156,7 +156,6 @@ void setup() {
 
     // Initialize UI
     UIManager::init();
-	UIManager::initPhysicalButtons();
 	Serial.println("[UI] UI init");
 
     // Create timer for periodic updates (50ms = 20Hz)

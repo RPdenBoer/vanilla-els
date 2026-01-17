@@ -38,6 +38,4 @@ static constexpr int SPI_MASTER_MISO = 46;  // GPIO46 is input-only, perfect for
 static constexpr int SPI_MASTER_CLK  = 14;
 static constexpr int SPI_MASTER_CS   = 5;
 
-// Physical ELS control buttons (active LOW with internal pullups)
-static constexpr int ELS_BTN_LEFT_PIN = 6;	// ELS positive direction
-static constexpr int ELS_BTN_RIGHT_PIN = 7; // ELS negative direction
+// (ELS physical buttons are wired to the motion board)
