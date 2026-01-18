@@ -93,6 +93,12 @@ void ToolManager::updateLabel(int index) {
         const lv_color_t bg = lv_palette_darken(LV_PALETTE_ORANGE, tool_b[index] ? 4 : 2);
         lv_obj_set_style_bg_color(tool_btns[index], bg, LV_PART_MAIN | LV_STATE_CHECKED);
         lv_obj_set_style_border_color(tool_btns[index], bg, LV_PART_MAIN | LV_STATE_CHECKED);
+		lv_obj_set_style_bg_color(tool_btns[index], bg, LV_PART_MAIN | LV_STATE_CHECKED | LV_STATE_PRESSED);
+		lv_obj_set_style_border_color(tool_btns[index], bg, LV_PART_MAIN | LV_STATE_CHECKED | LV_STATE_PRESSED);
+        lv_obj_set_style_bg_color(tool_btns[index], bg, LV_PART_MAIN | LV_STATE_CHECKED | LV_STATE_FOCUSED);
+        lv_obj_set_style_border_color(tool_btns[index], bg, LV_PART_MAIN | LV_STATE_CHECKED | LV_STATE_FOCUSED);
+        lv_obj_set_style_bg_color(tool_btns[index], bg, LV_PART_MAIN | LV_STATE_CHECKED | LV_STATE_FOCUS_KEY);
+        lv_obj_set_style_border_color(tool_btns[index], bg, LV_PART_MAIN | LV_STATE_CHECKED | LV_STATE_FOCUS_KEY);
     }
 }
 

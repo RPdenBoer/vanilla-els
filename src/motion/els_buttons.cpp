@@ -13,8 +13,8 @@ namespace {
 	static DualButtonState g_btn_state;
 	static constexpr DualButtonConfig BTN_CFG = {
 		.long_press_ms = SPINDLE_JOG_PRESS_MS,
-		.short_lockout_ms = 50,
-		.overlap_debounce_ms = 20,
+		.short_lockout_ms = MOMENTARY_SHORT_LOCKOUT_MS,
+		.overlap_debounce_ms = MOMENTARY_OVERLAP_DEBOUNCE_MS,
 		.require_other_released_for_short = true,
 	};
 

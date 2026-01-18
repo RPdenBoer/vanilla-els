@@ -8,10 +8,11 @@
 // ============================================================================
 
 // Fixed packet size for SPI DMA transfers (must match on both sides)
-static constexpr size_t PROTOCOL_PACKET_SIZE = 32;
+// Note: SPI slave buffers are 64 bytes, so we use the full size.
+static constexpr size_t PROTOCOL_PACKET_SIZE = 64;
 
 // Protocol version for compatibility checking
-static constexpr uint8_t PROTOCOL_VERSION = 13;
+static constexpr uint8_t PROTOCOL_VERSION = 14;
 
 // ============================================================================
 // MPG Mode (Manual Pulse Generator routing)
@@ -66,7 +67,7 @@ struct MotionStatusFlags {
 };
 
 // ============================================================================
-// Command packet: UI → Motion (32 bytes)
+// Command packet: UI → Motion (64 bytes)
 // ============================================================================
 struct __attribute__((packed)) CommandPacket {
     uint8_t version;              // Protocol version        [1]
@@ -89,13 +90,17 @@ struct __attribute__((packed)) CommandPacket {
 	uint8_t jog_active;			  // Jog active flag         [1]
 	uint8_t ota_request;		  // Request OTA mode        [1]
 	uint8_t reboot_request;		  // Request reboot          [1]
-	uint8_t sequence;             // Packet sequence number  [1]
-    uint8_t checksum;             // XOR checksum            [1]
-};                                // Total: 32 bytes
+
+	// Reserved for future extensions (keep packet size stable)
+	uint8_t reserved[32];          // [32]
+
+	uint8_t sequence;              // Packet sequence number  [1]
+    uint8_t checksum;            // XOR checksum            [1]
+};                                // Total: 64 bytes
 static_assert(sizeof(CommandPacket) == PROTOCOL_PACKET_SIZE, "CommandPacket size mismatch");
 
 // ============================================================================
-// Status packet: Motion → UI (32 bytes)
+// Status packet: Motion → UI (64 bytes)
 // ============================================================================
 struct __attribute__((packed)) StatusPacket {
     uint8_t version;              // Protocol version        [1]
@@ -116,9 +121,13 @@ struct __attribute__((packed)) StatusPacket {
 	uint16_t sync_speed_scale_permille; // ELS sync speed scale (1000 = 1.000x) [2]
 	uint16_t sync_abs_error_um;  // |Z_actual - Z_expected| for sync (microns) [2]
 
+	// Motion firmware build identifier (ASCII, null-terminated if shorter)
+	char motion_build[24];        // e.g. "Jan 18 2026 12:34:56" [24]
+	uint8_t reserved[8];          // Reserved/padding         [8]
+
 	uint8_t sequence;             // Echo of command seq     [1]
     uint8_t checksum;             // XOR checksum            [1]
-};                                // Total: 32 bytes
+};                                // Total: 64 bytes
 static_assert(sizeof(StatusPacket) == PROTOCOL_PACKET_SIZE, "StatusPacket size mismatch");
 
 // ============================================================================

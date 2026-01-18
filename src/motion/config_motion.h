@@ -43,8 +43,13 @@ static constexpr int32_t MPG_JOG_C_STEPS_PER_COUNT = 1;
 
 // Direction switch inputs (active LOW, external pullups recommended)
 // Both off = stopped, FWD on = forward, REV on = reverse
-static constexpr int SPINDLE_FWD_PIN = 21; // Forward switch (input only pin)
-static constexpr int SPINDLE_REV_PIN = 22; // Reverse switch (input only pin, VN)
+static constexpr int SPINDLE_FWD_PIN = 22; // Forward switch (input only pin)
+static constexpr int SPINDLE_REV_PIN = 21; // Reverse switch (input only pin, VN)
+
+// Momentary switch/button debounce tuning (milliseconds)
+// These values help prevent contact bounce from generating multiple short-press events.
+static constexpr uint32_t MOMENTARY_SHORT_LOCKOUT_MS = 200;
+static constexpr uint32_t MOMENTARY_OVERLAP_DEBOUNCE_MS = 50;
 
 // Acceleration limit (RPM per second) - prevents jerky speed changes
 static constexpr int32_t SPINDLE_ACCEL_RPM_PER_SEC = 500;

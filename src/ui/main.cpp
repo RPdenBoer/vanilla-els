@@ -45,6 +45,7 @@ static void updateFromMotionBoard() {
     SyncProxy::setAbsErrorUm(status.sync_abs_error_um);
 	OtaProxy::setMotionWifi(status.wifi_connected != 0);
 	OtaProxy::setMotionOtaActive(status.ota_active != 0);
+    OtaProxy::setMotionBuild(status.motion_build);
 
 	// Check for endstop hit flag from motion board
     // Motion endstop_hit is sticky until ELS is re-enabled; treat it as an event

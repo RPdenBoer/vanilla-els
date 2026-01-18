@@ -4,6 +4,7 @@
 #include <WiFi.h>
 #include <ArduinoOTA.h>
 #include <lvgl.h>
+#include "button_style_ui.h"
 
 bool OtaProxy::active = false;
 bool OtaProxy::ota_ready = false;
@@ -14,8 +15,12 @@ static lv_obj_t *ota_screen = nullptr;
 static lv_obj_t *ota_status = nullptr;
 static lv_obj_t *ota_wifi_ui = nullptr;
 static lv_obj_t *ota_wifi_motion = nullptr;
+static lv_obj_t *ota_ver_ui = nullptr;
+static lv_obj_t *ota_ver_motion = nullptr;
 static lv_obj_t *ota_reboot_btn = nullptr;
 static char ota_status_buf[64] = "";
+
+static char motion_build_buf[32] = "";
 
 enum class OtaUiState : uint8_t {
 	IDLE = 0,
@@ -76,13 +81,30 @@ static void ensureOtaScreen()
 		lv_obj_set_style_text_font(ota_wifi_motion, &lv_font_montserrat_14, 0);
 		lv_obj_set_style_text_color(ota_wifi_motion, lv_palette_main(LV_PALETTE_GREY), 0);
 
-		ota_reboot_btn = lv_btn_create(ota_screen);
+		ota_ver_ui = lv_label_create(ota_screen);
+		{
+			char buf[64];
+			snprintf(buf, sizeof(buf), "UI build: %s %s", __DATE__, __TIME__);
+			lv_label_set_text(ota_ver_ui, buf);
+		}
+		lv_obj_set_style_text_font(ota_ver_ui, &lv_font_montserrat_14, 0);
+		lv_obj_set_style_text_color(ota_ver_ui, lv_palette_main(LV_PALETTE_GREY), 0);
+
+		ota_ver_motion = lv_label_create(ota_screen);
+		lv_label_set_text(ota_ver_motion, "Motion build: (unknown)");
+		lv_obj_set_style_text_font(ota_ver_motion, &lv_font_montserrat_14, 0);
+		lv_obj_set_style_text_color(ota_ver_motion, lv_palette_main(LV_PALETTE_GREY), 0);
+
+		ota_reboot_btn = UiStyle::createButtonStripped(ota_screen);
 		lv_obj_set_width(ota_reboot_btn, LV_PCT(60));
 		lv_obj_set_height(ota_reboot_btn, 44);
 		lv_obj_clear_flag(ota_reboot_btn, LV_OBJ_FLAG_SCROLLABLE);
+		lv_obj_set_style_bg_opa(ota_reboot_btn, LV_OPA_COVER, LV_PART_MAIN);
+		lv_obj_set_style_border_width(ota_reboot_btn, 1, LV_PART_MAIN);
 		lv_obj_set_style_bg_color(ota_reboot_btn, lv_palette_darken(LV_PALETTE_RED, 1), LV_PART_MAIN);
 		lv_obj_set_style_border_color(ota_reboot_btn, lv_palette_darken(LV_PALETTE_RED, 1), LV_PART_MAIN);
 		lv_obj_set_style_text_color(ota_reboot_btn, lv_color_white(), LV_PART_MAIN);
+		UiStyle::applyButtonCommonStyle(ota_reboot_btn, 6);
 		lv_obj_add_event_cb(ota_reboot_btn, [](lv_event_t *e) {
 			if (lv_event_get_code(e) != LV_EVENT_CLICKED)
 				return;
@@ -151,6 +173,16 @@ static void updateOtaUi()
 		lv_obj_set_style_text_color(ota_wifi_motion,
 			motion_wifi_connected ? lv_palette_main(LV_PALETTE_GREEN) : lv_palette_main(LV_PALETTE_GREY), 0);
 		last_motion_wifi = motion_wifi_connected;
+	}
+
+	if (ota_ver_motion)
+	{
+		char buf[64];
+		if (motion_build_buf[0] != '\0')
+			snprintf(buf, sizeof(buf), "Motion build: %s", motion_build_buf);
+		else
+			snprintf(buf, sizeof(buf), "Motion build: (unknown)");
+		lv_label_set_text(ota_ver_motion, buf);
 	}
 }
 
@@ -254,4 +286,13 @@ void OtaProxy::setMotionOtaActive(bool active_motion)
 {
 	motion_ota_active = active_motion;
 	(void)motion_ota_active;
+}
+
+void OtaProxy::setMotionBuild(const char *build)
+{
+	if (!build)
+		build = "";
+	if (strncmp(motion_build_buf, build, sizeof(motion_build_buf)) == 0)
+		return;
+	snprintf(motion_build_buf, sizeof(motion_build_buf), "%s", build);
 }

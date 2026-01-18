@@ -12,6 +12,7 @@ public:
 	static bool shouldRequestReboot();
 	static void setMotionWifi(bool connected);
 	static void setMotionOtaActive(bool active);
+	static void setMotionBuild(const char *build);
 
 private:
 	static bool active;

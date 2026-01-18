@@ -196,6 +196,7 @@ void loop() {
 	status.wifi_connected = OtaMotion::isWifiConnected() ? 1 : 0;
 	status.sync_speed_scale_permille = ElsCore::getSyncSpeedScalePermille();
 	status.sync_abs_error_um = ElsCore::getSyncAbsErrorUm();
+	snprintf(status.motion_build, sizeof(status.motion_build), "%s %s", __DATE__, __TIME__);
 	status.sync_state = SyncStateProto::SYNC_DISABLED;
 	if (ElsCore::isSyncEnabled()) {
 		if (!ElsCore::isEnabled()) status.sync_state = SyncStateProto::SYNC_OUT_OF_SYNC;

@@ -7,6 +7,7 @@
 #include "leadscrew_proxy.h"
 #include "endstop_proxy.h"
 #include "sync_proxy.h"
+#include "button_style_ui.h"
 
 #include <cstring>
 #include <cstdio>
@@ -167,7 +168,7 @@ static lv_obj_t *create_numpad(lv_obj_t *parent) {
     lv_obj_set_grid_dsc_array(grid, col_dsc, row_dsc);
 
     auto make_key = [&](int col, int row, const char *txt, int keycode) {
-        lv_obj_t *btn = lv_btn_create(grid);
+        lv_obj_t *btn = UiStyle::createButtonStripped(grid);
         lv_obj_set_grid_cell(btn, LV_GRID_ALIGN_STRETCH, col, 1, LV_GRID_ALIGN_STRETCH, row, 1);
         lv_obj_clear_flag(btn, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_add_event_cb(btn, ModalManager::onNumpadKey, LV_EVENT_CLICKED, (void *)(intptr_t)keycode);
@@ -192,7 +193,7 @@ static lv_obj_t *create_numpad(lv_obj_t *parent) {
     lv_obj_set_flex_align(pm_cell, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     auto make_pm_key = [&](lv_obj_t *parent, const char *txt, int keycode) {
-        lv_obj_t *btn = lv_btn_create(parent);
+        lv_obj_t *btn = UiStyle::createButtonStripped(parent);
         lv_obj_set_height(btn, LV_PCT(100));
         lv_obj_set_flex_grow(btn, 1);
         lv_obj_clear_flag(btn, LV_OBJ_FLAG_SCROLLABLE);
@@ -218,7 +219,7 @@ static lv_obj_t *create_numpad(lv_obj_t *parent) {
     lv_obj_set_style_pad_gap(right_col, 2, 0);
     lv_obj_set_flex_flow(right_col, LV_FLEX_FLOW_COLUMN);
 
-    lv_obj_t *btn_bs = lv_btn_create(right_col);
+    lv_obj_t *btn_bs = UiStyle::createButtonStripped(right_col);
     lv_obj_set_width(btn_bs, LV_PCT(100));
     lv_obj_set_flex_grow(btn_bs, 1);
     lv_obj_add_event_cb(btn_bs, ModalManager::onNumpadBackspace, LV_EVENT_CLICKED, nullptr);
@@ -227,7 +228,7 @@ static lv_obj_t *create_numpad(lv_obj_t *parent) {
     lv_label_set_text(lblbs, "DEL");
     lv_obj_center(lblbs);
 
-    lv_obj_t *btn_clear = lv_btn_create(right_col);
+    lv_obj_t *btn_clear = UiStyle::createButtonStripped(right_col);
     lv_obj_set_width(btn_clear, LV_PCT(100));
     lv_obj_set_flex_grow(btn_clear, 1);
     lv_obj_add_event_cb(btn_clear, ModalManager::onNumpadClear, LV_EVENT_CLICKED, nullptr);
@@ -236,7 +237,7 @@ static lv_obj_t *create_numpad(lv_obj_t *parent) {
     lv_label_set_text(lblc, "CLEAR");
     lv_obj_center(lblc);
 
-    lv_obj_t *btn_cur = lv_btn_create(right_col);
+    lv_obj_t *btn_cur = UiStyle::createButtonStripped(right_col);
     lv_obj_set_width(btn_cur, LV_PCT(100));
     lv_obj_set_flex_grow(btn_cur, 1);
     lv_obj_add_event_cb(btn_cur, ModalManager::onNumpadCurrent, LV_EVENT_CLICKED, nullptr);
@@ -372,12 +373,14 @@ void ModalManager::showOffsetModal(AxisSel axis) {
     const int main_g_btn_w = OffsetManager::getMainOffsetButtonWidth();
 
     // T button
-    lv_obj_t *btn_t = lv_btn_create(row);
+    lv_obj_t *btn_t = UiStyle::createButtonStripped(row);
     lv_obj_set_size(btn_t, main_g_btn_w, 44);
     lv_obj_add_event_cb(btn_t, onSetTool, LV_EVENT_CLICKED, nullptr);
     const bool tool_b_active = ToolManager::isToolBActive(ToolManager::getCurrentTool());
     const lv_color_t tool_bg = lv_palette_darken(LV_PALETTE_ORANGE, tool_b_active ? 4 : 2);
+	lv_obj_set_style_bg_opa(btn_t, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_bg_color(btn_t, tool_bg, LV_PART_MAIN);
+	lv_obj_set_style_border_width(btn_t, 1, LV_PART_MAIN);
     lv_obj_set_style_border_color(btn_t, tool_bg, LV_PART_MAIN);
     lv_obj_set_style_text_color(btn_t, lv_color_white(), LV_PART_MAIN);
     char ttxt[12];
@@ -388,15 +391,17 @@ void ModalManager::showOffsetModal(AxisSel axis) {
     lv_obj_t *lblt = lv_label_create(btn_t);
     lv_label_set_text(lblt, ttxt);
     lv_obj_center(lblt);
-    apply_modal_button_common_style(btn_t);
+	UiStyle::applyButtonCommonStyle(btn_t, 6);
 
     // G button
-    lv_obj_t *btn_g = lv_btn_create(row);
+    lv_obj_t *btn_g = UiStyle::createButtonStripped(row);
     lv_obj_set_size(btn_g, main_g_btn_w, 44);
     lv_obj_add_event_cb(btn_g, onSetGlobal, LV_EVENT_CLICKED, nullptr);
     const bool offset_b_active = OffsetManager::isOffsetBActive(OffsetManager::getCurrentOffset());
     const lv_color_t offset_bg = lv_palette_darken(LV_PALETTE_BLUE, offset_b_active ? 4 : 2);
+	lv_obj_set_style_bg_opa(btn_g, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_bg_color(btn_g, offset_bg, LV_PART_MAIN);
+	lv_obj_set_style_border_width(btn_g, 1, LV_PART_MAIN);
     lv_obj_set_style_border_color(btn_g, offset_bg, LV_PART_MAIN);
     lv_obj_set_style_text_color(btn_g, lv_color_white(), LV_PART_MAIN);
     char gtxt[12];
@@ -407,10 +412,10 @@ void ModalManager::showOffsetModal(AxisSel axis) {
     lv_obj_t *lblg = lv_label_create(btn_g);
     lv_label_set_text(lblg, gtxt);
     lv_obj_center(lblg);
-    apply_modal_button_common_style(btn_g);
+	UiStyle::applyButtonCommonStyle(btn_g, 6);
 
     // X button
-    lv_obj_t *btn_x = lv_btn_create(row);
+    lv_obj_t *btn_x = UiStyle::createButtonStripped(row);
     lv_obj_set_size(btn_x, main_g_btn_w, 44);
     lv_obj_add_event_cb(btn_x, onCancel, LV_EVENT_CLICKED, nullptr);
     lv_obj_set_style_bg_opa(btn_x, LV_OPA_TRANSP, LV_PART_MAIN);
@@ -420,7 +425,7 @@ void ModalManager::showOffsetModal(AxisSel axis) {
     lv_obj_t *lblx = lv_label_create(btn_x);
     lv_label_set_text(lblx, "X");
     lv_obj_center(lblx);
-    apply_modal_button_common_style(btn_x);
+	UiStyle::applyButtonCommonStyle(btn_x, 6);
 
     kb = create_numpad(modal_win);
 }
@@ -472,26 +477,30 @@ void ModalManager::showPitchModal() {
 
     const int btn_w = OffsetManager::getMainOffsetButtonWidth();
 
-    lv_obj_t *btn_ok = lv_btn_create(row);
+    lv_obj_t *btn_ok = UiStyle::createButtonStripped(row);
     lv_obj_set_size(btn_ok, btn_w, 44);
     lv_obj_add_event_cb(btn_ok, onPitchOk, LV_EVENT_CLICKED, nullptr);
+	lv_obj_set_style_bg_opa(btn_ok, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_bg_color(btn_ok, lv_palette_darken(LV_PALETTE_GREEN, 2), LV_PART_MAIN);
+	lv_obj_set_style_border_width(btn_ok, 1, LV_PART_MAIN);
+	lv_obj_set_style_border_color(btn_ok, lv_palette_darken(LV_PALETTE_GREEN, 2), LV_PART_MAIN);
     lv_obj_set_style_text_color(btn_ok, lv_color_white(), LV_PART_MAIN);
     lv_obj_t *lblo = lv_label_create(btn_ok);
     lv_label_set_text(lblo, "OK");
     lv_obj_center(lblo);
-    apply_modal_button_common_style(btn_ok);
+	UiStyle::applyButtonCommonStyle(btn_ok, 6);
 
-    lv_obj_t *btn_x = lv_btn_create(row);
+    lv_obj_t *btn_x = UiStyle::createButtonStripped(row);
     lv_obj_set_size(btn_x, btn_w, 44);
     lv_obj_add_event_cb(btn_x, onCancel, LV_EVENT_CLICKED, nullptr);
     lv_obj_set_style_bg_opa(btn_x, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(btn_x, 1, LV_PART_MAIN);
     lv_obj_set_style_border_color(btn_x, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+	lv_obj_set_style_text_color(btn_x, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
     lv_obj_t *lblx = lv_label_create(btn_x);
     lv_label_set_text(lblx, "X");
     lv_obj_center(lblx);
-    apply_modal_button_common_style(btn_x);
+	UiStyle::applyButtonCommonStyle(btn_x, 6);
 
     kb = create_numpad(modal_win);
 }
@@ -545,26 +554,30 @@ void ModalManager::showEndstopModal(bool is_max) {
 
     const int btn_w = OffsetManager::getMainOffsetButtonWidth();
 
-    lv_obj_t *btn_ok = lv_btn_create(row);
+    lv_obj_t *btn_ok = UiStyle::createButtonStripped(row);
     lv_obj_set_size(btn_ok, btn_w, 44);
     lv_obj_add_event_cb(btn_ok, onEndstopOk, LV_EVENT_CLICKED, nullptr);
+	lv_obj_set_style_bg_opa(btn_ok, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_bg_color(btn_ok, lv_palette_darken(LV_PALETTE_GREEN, 2), LV_PART_MAIN);
+	lv_obj_set_style_border_width(btn_ok, 1, LV_PART_MAIN);
+	lv_obj_set_style_border_color(btn_ok, lv_palette_darken(LV_PALETTE_GREEN, 2), LV_PART_MAIN);
     lv_obj_set_style_text_color(btn_ok, lv_color_white(), LV_PART_MAIN);
     lv_obj_t *lblo = lv_label_create(btn_ok);
     lv_label_set_text(lblo, "OK");
     lv_obj_center(lblo);
-    apply_modal_button_common_style(btn_ok);
+	UiStyle::applyButtonCommonStyle(btn_ok, 6);
 
-    lv_obj_t *btn_x = lv_btn_create(row);
+    lv_obj_t *btn_x = UiStyle::createButtonStripped(row);
     lv_obj_set_size(btn_x, btn_w, 44);
     lv_obj_add_event_cb(btn_x, onCancel, LV_EVENT_CLICKED, nullptr);
     lv_obj_set_style_bg_opa(btn_x, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(btn_x, 1, LV_PART_MAIN);
     lv_obj_set_style_border_color(btn_x, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+	lv_obj_set_style_text_color(btn_x, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
     lv_obj_t *lblx = lv_label_create(btn_x);
     lv_label_set_text(lblx, "X");
     lv_obj_center(lblx);
-    apply_modal_button_common_style(btn_x);
+	UiStyle::applyButtonCommonStyle(btn_x, 6);
 
     kb = create_numpad(modal_win);
 }
@@ -616,26 +629,30 @@ void ModalManager::showSyncModal() {
 
     const int btn_w = OffsetManager::getMainOffsetButtonWidth();
 
-    lv_obj_t *btn_ok = lv_btn_create(row);
+    lv_obj_t *btn_ok = UiStyle::createButtonStripped(row);
     lv_obj_set_size(btn_ok, btn_w, 44);
     lv_obj_add_event_cb(btn_ok, onSyncOk, LV_EVENT_CLICKED, nullptr);
+	lv_obj_set_style_bg_opa(btn_ok, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_bg_color(btn_ok, lv_palette_darken(LV_PALETTE_GREEN, 2), LV_PART_MAIN);
+	lv_obj_set_style_border_width(btn_ok, 1, LV_PART_MAIN);
+	lv_obj_set_style_border_color(btn_ok, lv_palette_darken(LV_PALETTE_GREEN, 2), LV_PART_MAIN);
     lv_obj_set_style_text_color(btn_ok, lv_color_white(), LV_PART_MAIN);
     lv_obj_t *lblo = lv_label_create(btn_ok);
     lv_label_set_text(lblo, "OK");
     lv_obj_center(lblo);
-    apply_modal_button_common_style(btn_ok);
+	UiStyle::applyButtonCommonStyle(btn_ok, 6);
 
-    lv_obj_t *btn_x = lv_btn_create(row);
+    lv_obj_t *btn_x = UiStyle::createButtonStripped(row);
     lv_obj_set_size(btn_x, btn_w, 44);
     lv_obj_add_event_cb(btn_x, onCancel, LV_EVENT_CLICKED, nullptr);
     lv_obj_set_style_bg_opa(btn_x, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(btn_x, 1, LV_PART_MAIN);
     lv_obj_set_style_border_color(btn_x, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+	lv_obj_set_style_text_color(btn_x, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
     lv_obj_t *lblx = lv_label_create(btn_x);
     lv_label_set_text(lblx, "X");
     lv_obj_center(lblx);
-    apply_modal_button_common_style(btn_x);
+	UiStyle::applyButtonCommonStyle(btn_x, 6);
 
     kb = create_numpad(modal_win);
 }

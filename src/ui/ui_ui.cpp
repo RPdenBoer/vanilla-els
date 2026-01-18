@@ -10,29 +10,12 @@
 #include "sync_proxy.h"
 #include "ota_proxy.h"
 #include "spi_master.h"
+#include "button_style_ui.h"
 #include <Arduino.h>
 #include <cstring>
 #include <cstdio>
 
-static const lv_style_prop_t NO_TRANS_PROPS[] = {0};
-static const lv_style_transition_dsc_t NO_TRANSITION = {
-    .props = NO_TRANS_PROPS, .user_data = nullptr,
-    .path_xcb = lv_anim_path_linear, .time = 0, .delay = 0,
-};
-
-static void apply_button_common_style(lv_obj_t *btn) {
-    if (!btn) return;
-    lv_obj_set_style_shadow_width(btn, 0, LV_PART_MAIN);
-    lv_obj_set_style_outline_width(btn, 0, LV_PART_MAIN);
-    lv_obj_set_style_transform_scale_x(btn, 256, LV_PART_MAIN | LV_STATE_PRESSED);
-    lv_obj_set_style_transform_scale_y(btn, 256, LV_PART_MAIN | LV_STATE_PRESSED);
-    lv_obj_set_style_transform_width(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED);
-    lv_obj_set_style_transform_height(btn, 0, LV_PART_MAIN | LV_STATE_PRESSED);
-    lv_obj_set_style_border_width(btn, 1, LV_PART_MAIN | LV_STATE_PRESSED);
-    lv_obj_set_style_anim_duration(btn, 0, LV_PART_MAIN);
-    lv_obj_set_style_transition(btn, &NO_TRANSITION, LV_PART_MAIN);
-    lv_obj_set_style_transition(btn, &NO_TRANSITION, LV_PART_MAIN | LV_STATE_PRESSED);
-}
+static constexpr int32_t UI_BUTTON_RADIUS = 6;
 
 static lv_color_t endstop_active_color()
 {
@@ -146,7 +129,7 @@ void UIManager::createUI() {
     lv_obj_set_flex_align(offset_row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     for (int i = 0; i < OFFSET_COUNT; i++) {
-        lv_obj_t *btn = lv_btn_create(offset_row);
+		lv_obj_t *btn = UiStyle::createButtonStripped(offset_row);
         lv_obj_set_height(btn, 44);
         lv_obj_set_flex_grow(btn, 1);
         lv_obj_clear_flag(btn, LV_OBJ_FLAG_SCROLLABLE);
@@ -161,7 +144,7 @@ void UIManager::createUI() {
         lv_obj_set_style_bg_color(btn, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_MAIN | LV_STATE_CHECKED);
         lv_obj_set_style_border_color(btn, lv_palette_darken(LV_PALETTE_BLUE, 2), LV_PART_MAIN | LV_STATE_CHECKED);
         lv_obj_set_style_text_color(btn, lv_color_white(), LV_PART_MAIN | LV_STATE_CHECKED);
-        apply_button_common_style(btn);
+		UiStyle::applyButtonCommonStyle(btn, UI_BUTTON_RADIUS);
         OffsetManager::registerButton(i, btn);
         lv_obj_t *lbl = lv_label_create(btn);
         char txt[8]; snprintf(txt, sizeof(txt), "G%d", i + 1);
@@ -181,7 +164,7 @@ void UIManager::createUI() {
     lv_obj_set_style_pad_gap(units_row, 4, 0);
     lv_obj_set_flex_flow(units_row, LV_FLEX_FLOW_ROW);
 
-    lv_obj_t *btn_units = lv_btn_create(units_row);
+	lv_obj_t *btn_units = UiStyle::createButtonStripped(units_row);
     lv_obj_set_height(btn_units, 44);
     lv_obj_set_flex_grow(btn_units, 1);
     lv_obj_clear_flag(btn_units, LV_OBJ_FLAG_SCROLLABLE);
@@ -190,12 +173,12 @@ void UIManager::createUI() {
     lv_obj_set_style_border_width(btn_units, 1, LV_PART_MAIN);
     lv_obj_set_style_border_color(btn_units, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
     lv_obj_set_style_text_color(btn_units, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
-    apply_button_common_style(btn_units);
+	UiStyle::applyButtonCommonStyle(btn_units, UI_BUTTON_RADIUS);
     lbl_units_mode = lv_label_create(btn_units);
     lv_label_set_text(lbl_units_mode, CoordinateSystem::isLinearInchMode() ? "INCH" : "MM");
     lv_obj_center(lbl_units_mode);
 
-	lv_obj_t *btn_pitch_mode = lv_btn_create(units_row);
+	lv_obj_t *btn_pitch_mode = UiStyle::createButtonStripped(units_row);
 	lv_obj_set_height(btn_pitch_mode, 44);
 	lv_obj_set_flex_grow(btn_pitch_mode, 1);
 	lv_obj_clear_flag(btn_pitch_mode, LV_OBJ_FLAG_SCROLLABLE);
@@ -204,7 +187,7 @@ void UIManager::createUI() {
     lv_obj_set_style_border_width(btn_pitch_mode, 1, LV_PART_MAIN);
     lv_obj_set_style_border_color(btn_pitch_mode, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
     lv_obj_set_style_text_color(btn_pitch_mode, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
-    apply_button_common_style(btn_pitch_mode);
+	UiStyle::applyButtonCommonStyle(btn_pitch_mode, UI_BUTTON_RADIUS);
     lbl_pitch_mode = lv_label_create(btn_pitch_mode);
     lv_label_set_text(lbl_pitch_mode, LeadscrewProxy::isPitchTpiMode() ? "TPI" : "PITCH");
     lv_obj_center(lbl_pitch_mode);
@@ -221,7 +204,7 @@ void UIManager::createUI() {
     lv_obj_set_flex_flow(pitch_row, LV_FLEX_FLOW_ROW);
 
 	// Pitch value button
-	lv_obj_t *btn_pitch = lv_btn_create(pitch_row);
+	lv_obj_t *btn_pitch = UiStyle::createButtonStripped(pitch_row);
     lv_obj_set_height(btn_pitch, LV_PCT(100));
     lv_obj_set_flex_grow(btn_pitch, 1);
     lv_obj_clear_flag(btn_pitch, LV_OBJ_FLAG_SCROLLABLE);
@@ -230,7 +213,7 @@ void UIManager::createUI() {
     lv_obj_set_style_border_width(btn_pitch, 1, LV_PART_MAIN);
     lv_obj_set_style_border_color(btn_pitch, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
     lv_obj_set_style_text_color(btn_pitch, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
-    apply_button_common_style(btn_pitch);
+	UiStyle::applyButtonCommonStyle(btn_pitch, UI_BUTTON_RADIUS);
     lbl_pitch = lv_label_create(btn_pitch);
 	lv_obj_set_style_text_font(lbl_pitch, &lv_font_montserrat_28, 0);
 	char pbuf[32];
@@ -239,7 +222,7 @@ void UIManager::createUI() {
     lv_obj_center(lbl_pitch);
 
 	// Sync button
-	btn_sync_ptr = lv_btn_create(pitch_row);
+	btn_sync_ptr = UiStyle::createButtonStripped(pitch_row);
 	lv_obj_set_height(btn_sync_ptr, LV_PCT(100));
 	lv_obj_set_width(btn_sync_ptr, 52);
 	lv_obj_clear_flag(btn_sync_ptr, LV_OBJ_FLAG_SCROLLABLE);
@@ -278,7 +261,7 @@ void UIManager::createUI() {
 	lv_obj_set_style_bg_color(btn_sync_ptr, endstop_active_color(), LV_PART_MAIN | LV_STATE_USER_3 | LV_STATE_CHECKED);
 	lv_obj_set_style_border_color(btn_sync_ptr, endstop_active_color(), LV_PART_MAIN | LV_STATE_USER_3 | LV_STATE_CHECKED);
 	lv_obj_set_style_text_color(btn_sync_ptr, lv_color_white(), LV_PART_MAIN | LV_STATE_USER_3 | LV_STATE_CHECKED);
-	apply_button_common_style(btn_sync_ptr);
+	UiStyle::applyButtonCommonStyle(btn_sync_ptr, UI_BUTTON_RADIUS);
 	lv_obj_t *lbl_sync = lv_label_create(btn_sync_ptr);
 	lv_label_set_text(lbl_sync, "|•|");
 	lv_obj_set_style_text_font(lbl_sync, &lv_font_montserrat_20, 0);
@@ -296,7 +279,7 @@ void UIManager::createUI() {
 	lv_obj_set_flex_flow(els_row, LV_FLEX_FLOW_ROW);
 
 	// Z left endstop button
-	btn_endstop_min_ptr = lv_btn_create(els_row);
+	btn_endstop_min_ptr = UiStyle::createButtonStripped(els_row);
 	lv_obj_set_height(btn_endstop_min_ptr, LV_PCT(100));
 	lv_obj_set_flex_grow(btn_endstop_min_ptr, 1);
 	lv_obj_clear_flag(btn_endstop_min_ptr, LV_OBJ_FLAG_SCROLLABLE);
@@ -318,16 +301,17 @@ void UIManager::createUI() {
 	lv_obj_set_style_bg_color(btn_endstop_min_ptr, endstop_hit_color(), LV_PART_MAIN | LV_STATE_USER_1 | LV_STATE_CHECKED);
 	lv_obj_set_style_border_color(btn_endstop_min_ptr, endstop_hit_color(), LV_PART_MAIN | LV_STATE_USER_1 | LV_STATE_CHECKED);
 	lv_obj_set_style_text_color(btn_endstop_min_ptr, lv_color_white(), LV_PART_MAIN | LV_STATE_USER_1 | LV_STATE_CHECKED);
-	apply_button_common_style(btn_endstop_min_ptr);
+	UiStyle::applyButtonCommonStyle(btn_endstop_min_ptr, UI_BUTTON_RADIUS);
 	lv_obj_t *lbl_emin = lv_label_create(btn_endstop_min_ptr);
 	lv_label_set_text(lbl_emin, "|<");
 	lv_obj_set_style_text_font(lbl_emin, &lv_font_montserrat_20, 0);
 	lv_obj_center(lbl_emin);
 
 	// Center ELS pseudo e-stop button (disabled unless ELS is enabled)
-	btn_els_estop_ptr = lv_btn_create(els_row);
+	btn_els_estop_ptr = UiStyle::createButtonStripped(els_row);
 	lv_obj_set_height(btn_els_estop_ptr, LV_PCT(100));
-	lv_obj_set_flex_grow(btn_els_estop_ptr, 1);
+	// Small button: just wide enough for "<" / ">".
+	lv_obj_set_width(btn_els_estop_ptr, 44);
 	lv_obj_clear_flag(btn_els_estop_ptr, LV_OBJ_FLAG_SCROLLABLE);
 	lv_obj_add_event_cb(btn_els_estop_ptr, onElsEStop, LV_EVENT_SHORT_CLICKED, nullptr);
 	lv_obj_set_style_bg_opa(btn_els_estop_ptr, LV_OPA_TRANSP, LV_PART_MAIN);
@@ -339,15 +323,16 @@ void UIManager::createUI() {
 	lv_obj_set_style_bg_color(btn_els_estop_ptr, lv_palette_darken(LV_PALETTE_GREY, 4), LV_PART_MAIN | LV_STATE_DISABLED);
 	lv_obj_set_style_border_color(btn_els_estop_ptr, lv_palette_darken(LV_PALETTE_GREY, 3), LV_PART_MAIN | LV_STATE_DISABLED);
 	lv_obj_set_style_text_color(btn_els_estop_ptr, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN | LV_STATE_DISABLED);
-	apply_button_common_style(btn_els_estop_ptr);
+	UiStyle::applyButtonCommonStyle(btn_els_estop_ptr, UI_BUTTON_RADIUS);
 	lbl_els_estop_ptr = lv_label_create(btn_els_estop_ptr);
-	lv_label_set_text(lbl_els_estop_ptr, "ELS");
+	// Hidden label while disabled; direction arrow is shown when enabled.
+	lv_label_set_text(lbl_els_estop_ptr, "•");
 	lv_obj_set_style_text_font(lbl_els_estop_ptr, &lv_font_montserrat_20, 0);
 	lv_obj_center(lbl_els_estop_ptr);
 	lv_obj_add_state(btn_els_estop_ptr, LV_STATE_DISABLED);
 
 	// Z right endstop button
-	btn_endstop_max_ptr = lv_btn_create(els_row);
+	btn_endstop_max_ptr = UiStyle::createButtonStripped(els_row);
 	lv_obj_set_height(btn_endstop_max_ptr, LV_PCT(100));
 	lv_obj_set_flex_grow(btn_endstop_max_ptr, 1);
 	lv_obj_clear_flag(btn_endstop_max_ptr, LV_OBJ_FLAG_SCROLLABLE);
@@ -369,7 +354,7 @@ void UIManager::createUI() {
 	lv_obj_set_style_bg_color(btn_endstop_max_ptr, endstop_hit_color(), LV_PART_MAIN | LV_STATE_USER_1 | LV_STATE_CHECKED);
 	lv_obj_set_style_border_color(btn_endstop_max_ptr, endstop_hit_color(), LV_PART_MAIN | LV_STATE_USER_1 | LV_STATE_CHECKED);
 	lv_obj_set_style_text_color(btn_endstop_max_ptr, lv_color_white(), LV_PART_MAIN | LV_STATE_USER_1 | LV_STATE_CHECKED);
-	apply_button_common_style(btn_endstop_max_ptr);
+	UiStyle::applyButtonCommonStyle(btn_endstop_max_ptr, UI_BUTTON_RADIUS);
 	lv_obj_t *lbl_emax = lv_label_create(btn_endstop_max_ptr);
 	lv_label_set_text(lbl_emax, ">|");
 	lv_obj_set_style_text_font(lbl_emax, &lv_font_montserrat_20, 0);
@@ -395,7 +380,7 @@ void UIManager::createUI() {
     lv_obj_set_flex_flow(tool_row, LV_FLEX_FLOW_ROW);
 
     for (int i = 0; i < TOOL_COUNT; i++) {
-        lv_obj_t *btn = lv_btn_create(tool_row);
+		lv_obj_t *btn = UiStyle::createButtonStripped(tool_row);
         lv_obj_set_height(btn, 44);
         lv_obj_set_flex_grow(btn, 1);
         lv_obj_clear_flag(btn, LV_OBJ_FLAG_SCROLLABLE);
@@ -406,11 +391,40 @@ void UIManager::createUI() {
         lv_obj_set_style_border_width(btn, 1, LV_PART_MAIN);
         lv_obj_set_style_border_color(btn, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
         lv_obj_set_style_text_color(btn, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
+
+		// Override default theme focus styling (often blue).
+		lv_obj_set_style_bg_opa(btn, LV_OPA_TRANSP, LV_PART_MAIN | LV_STATE_FOCUSED);
+		lv_obj_set_style_border_color(btn, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN | LV_STATE_FOCUSED);
+		lv_obj_set_style_text_color(btn, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN | LV_STATE_FOCUSED);
+		lv_obj_set_style_bg_opa(btn, LV_OPA_TRANSP, LV_PART_MAIN | LV_STATE_FOCUS_KEY);
+		lv_obj_set_style_border_color(btn, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN | LV_STATE_FOCUS_KEY);
+		lv_obj_set_style_text_color(btn, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN | LV_STATE_FOCUS_KEY);
+
+		// Avoid LVGL theme "pressed" color flash (default theme uses blue).
+		// Keep the press feedback purely as a transform (see apply_button_common_style).
+		lv_obj_set_style_bg_opa(btn, LV_OPA_TRANSP, LV_PART_MAIN | LV_STATE_PRESSED);
+		lv_obj_set_style_border_color(btn, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN | LV_STATE_PRESSED);
+		lv_obj_set_style_text_color(btn, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN | LV_STATE_PRESSED);
+
         lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_CHECKED);
         lv_obj_set_style_bg_color(btn, lv_palette_darken(LV_PALETTE_ORANGE, 2), LV_PART_MAIN | LV_STATE_CHECKED);
         lv_obj_set_style_border_color(btn, lv_palette_darken(LV_PALETTE_ORANGE, 2), LV_PART_MAIN | LV_STATE_CHECKED);
         lv_obj_set_style_text_color(btn, lv_color_white(), LV_PART_MAIN | LV_STATE_CHECKED);
-        apply_button_common_style(btn);
+		lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_CHECKED | LV_STATE_FOCUSED);
+		lv_obj_set_style_bg_color(btn, lv_palette_darken(LV_PALETTE_ORANGE, 2), LV_PART_MAIN | LV_STATE_CHECKED | LV_STATE_FOCUSED);
+		lv_obj_set_style_border_color(btn, lv_palette_darken(LV_PALETTE_ORANGE, 2), LV_PART_MAIN | LV_STATE_CHECKED | LV_STATE_FOCUSED);
+		lv_obj_set_style_text_color(btn, lv_color_white(), LV_PART_MAIN | LV_STATE_CHECKED | LV_STATE_FOCUSED);
+		lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_CHECKED | LV_STATE_FOCUS_KEY);
+		lv_obj_set_style_bg_color(btn, lv_palette_darken(LV_PALETTE_ORANGE, 2), LV_PART_MAIN | LV_STATE_CHECKED | LV_STATE_FOCUS_KEY);
+		lv_obj_set_style_border_color(btn, lv_palette_darken(LV_PALETTE_ORANGE, 2), LV_PART_MAIN | LV_STATE_CHECKED | LV_STATE_FOCUS_KEY);
+		lv_obj_set_style_text_color(btn, lv_color_white(), LV_PART_MAIN | LV_STATE_CHECKED | LV_STATE_FOCUS_KEY);
+
+		// When the selected tool is pressed, keep it visually selected.
+		lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_CHECKED | LV_STATE_PRESSED);
+		lv_obj_set_style_bg_color(btn, lv_palette_darken(LV_PALETTE_ORANGE, 2), LV_PART_MAIN | LV_STATE_CHECKED | LV_STATE_PRESSED);
+		lv_obj_set_style_border_color(btn, lv_palette_darken(LV_PALETTE_ORANGE, 2), LV_PART_MAIN | LV_STATE_CHECKED | LV_STATE_PRESSED);
+		lv_obj_set_style_text_color(btn, lv_color_white(), LV_PART_MAIN | LV_STATE_CHECKED | LV_STATE_PRESSED);
+		UiStyle::applyButtonCommonStyle(btn, UI_BUTTON_RADIUS);
         ToolManager::registerButton(i, btn);
         lv_obj_t *lbl = lv_label_create(btn);
         char txt[8]; snprintf(txt, sizeof(txt), "T%d", i + 1);
@@ -818,7 +832,7 @@ void UIManager::updateEndstopButtonStates() {
 				lv_obj_set_style_bg_opa(btn_els_estop_ptr, LV_OPA_TRANSP, LV_PART_MAIN);
 				lv_obj_set_style_border_color(btn_els_estop_ptr, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
 				lv_obj_set_style_text_color(btn_els_estop_ptr, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN);
-				lv_label_set_text(lbl_els_estop_ptr, "ELS");
+				lv_label_set_text(lbl_els_estop_ptr, "|");
 			}
 			else
 			{
